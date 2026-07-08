@@ -42,7 +42,7 @@ export default function Onboarding({ onComplete }) {
       {view === 'menu' ? (
         <>
           <div className="flex flex-1 flex-col items-center justify-center text-center">
-            <img src="/logo.png" alt="" aria-hidden="true" className="mb-5 h-20 w-20" />
+            <img src={`${import.meta.env.BASE_URL}logo.png`} alt="" aria-hidden="true" className="mb-5 h-20 w-20" />
             <h1 className="mb-2 text-2xl font-bold">Welcome to greuro</h1>
             <p className="max-w-[280px] text-sm leading-relaxed text-txt-secondary">
               Grow your euros — private, offline budgeting. Everything stays on this device: no

@@ -398,7 +398,7 @@ export default function Settings({ open, onClose, accounts, categories, onChange
               <h2 className="mb-3 text-base font-semibold text-txt-primary">About</h2>
               <div className="rounded-card border border-hairline bg-card p-4 text-sm text-txt-secondary">
                 <div className="mb-2 flex items-center gap-2.5">
-                  <img src="/logo.png" alt="" aria-hidden="true" className="h-7 w-7" />
+                  <img src={`${import.meta.env.BASE_URL}logo.png`} alt="" aria-hidden="true" className="h-7 w-7" />
                   <p className="font-medium text-txt-primary">greuro — grow your euros</p>
                 </div>
                 <p className="leading-snug">

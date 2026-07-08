@@ -155,7 +155,7 @@ export default function Dashboard() {
       <header className="sticky top-0 z-30 flex min-h-[70px] items-center justify-between bg-bg/90 px-4 pb-2 pt-4 backdrop-blur">
         <div className="flex items-center gap-2.5">
           {/* Brand mark (wordmark-free per branding) */}
-          <img src="/logo.png" alt="greuro" className="h-8 w-8" />
+          <img src={`${import.meta.env.BASE_URL}logo.png`} alt="greuro" className="h-8 w-8" />
           <h1 className="text-2xl font-semibold text-txt-primary">Overview</h1>
         </div>
         <div className="flex gap-2">
