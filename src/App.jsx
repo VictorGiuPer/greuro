@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { postDueScheduled, getSetting, setSetting } from './db'
 import { isDatabaseEmpty } from './db/maintenance'
+import { requestPersistentStorage } from './lib/storage'
 import BottomTabBar from './components/BottomTabBar'
 import Toast from './components/ui/Toast'
 import Onboarding from './components/onboarding/Onboarding'
@@ -19,6 +20,8 @@ export default function App() {
   useEffect(() => {
     let active = true
     ;(async () => {
+      // Best-effort: keep our data safe from eviction (esp. iOS PWAs).
+      requestPersistentStorage()
       let onboarded = await getSetting('onboarded')
       if (!onboarded && !(await isDatabaseEmpty())) {
         // Existing data from before onboarding shipped — don't ask again.
