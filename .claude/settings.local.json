@@ -42,7 +42,9 @@
       "PowerShell(& \"C:\\\\Program Files\\\\nodejs\\\\node.exe\" \"C:\\\\Users\\\\victo\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-victo-VSCode-Folder-Budgeting-App\\\\3420154c-f380-4d02-825f-603fd6b17da3\\\\scratchpad\\\\check-real-fydb.mjs\")",
       "PowerShell(Copy-Item \"C:\\\\Users\\\\victo\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-victo-VSCode-Folder-Budgeting-App\\\\3420154c-f380-4d02-825f-603fd6b17da3\\\\scratchpad\\\\check-real-fydb.mjs\" \"c:\\\\Users\\\\victo\\\\VSCode Folder\\\\Budgeting App\\\\check-real-fydb.mjs\"; \\(Get-Content \"c:\\\\Users\\\\victo\\\\VSCode Folder\\\\Budgeting App\\\\check-real-fydb.mjs\" -Raw\\) -replace [regex]::Escape\\(\"'../../../../../../VSCode Folder/Budgeting App/src/db/bluecoinsSqlite.js'\"\\), \"'./src/db/bluecoinsSqlite.js'\" | Set-Content \"c:\\\\Users\\\\victo\\\\VSCode Folder\\\\Budgeting App\\\\check-real-fydb.mjs\" -Encoding utf8; & \"C:\\\\Program Files\\\\nodejs\\\\node.exe\" \"c:\\\\Users\\\\victo\\\\VSCode Folder\\\\Budgeting App\\\\check-real-fydb.mjs\")",
       "PowerShell(Remove-Item \"c:\\\\Users\\\\victo\\\\VSCode Folder\\\\Budgeting App\\\\check-real-fydb.mjs\" -Confirm:$false)",
-      "PowerShell(& \"C:\\\\Program Files\\\\nodejs\\\\npx.cmd\" vitest run src/db/realfydb.check.test.js)"
+      "PowerShell(& \"C:\\\\Program Files\\\\nodejs\\\\npx.cmd\" vitest run src/db/realfydb.check.test.js)",
+      "Bash(\"/c/Program Files/nodejs/npm.cmd\" install -D playwright-core)",
+      "Bash(\"/c/Program Files/nodejs/node.exe\" scripts/record-demo.mjs)"
     ]
   }
 }

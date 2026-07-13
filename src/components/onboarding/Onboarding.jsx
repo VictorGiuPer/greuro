@@ -4,6 +4,7 @@ import { addAccount, seedIfEmpty } from '../../db'
 import AccountForm from '../settings/AccountForm'
 import ImportJson from '../settings/ImportJson'
 import BlueCoinsImport from '../settings/BlueCoinsImport'
+import InstallAppButton from '../InstallAppButton'
 
 /**
  * First-run flow (only when the database is completely empty): create the
@@ -45,12 +46,15 @@ export default function Onboarding({ onComplete }) {
             <img src={`${import.meta.env.BASE_URL}logo.png`} alt="" aria-hidden="true" className="mb-5 h-20 w-20" />
             <h1 className="mb-2 text-2xl font-bold">Welcome to greuro</h1>
             <p className="max-w-[280px] text-sm leading-relaxed text-txt-secondary">
-              Grow your euros — private, offline budgeting. Everything stays on this device: no
+              Grow your euros. Private, offline budgeting. Everything stays on this device: no
               account, no cloud.
             </p>
           </div>
 
           <div className="space-y-3">
+            {/* Hides itself when already installed or when the browser can't. */}
+            <InstallAppButton variant="card" />
+
             <OptionCard
               icon={Wallet}
               title="Create my first account"
@@ -59,10 +63,11 @@ export default function Onboarding({ onComplete }) {
               primary
             />
             <OptionCard
-              icon={FileSpreadsheet}
-              title="Import from BlueCoins"
-              desc="Bring your history over (CSV / XLSX export)"
-              onClick={() => setImportView('bluecoins')}
+              icon={Sprout}
+              title="Explore with sample data"
+              desc="Look around first, wipe it later in Settings"
+              onClick={loadSample}
+              disabled={busy}
             />
             <OptionCard
               icon={FileJson}
@@ -71,11 +76,10 @@ export default function Onboarding({ onComplete }) {
               onClick={() => setImportView('json')}
             />
             <OptionCard
-              icon={Sprout}
-              title="Explore with sample data"
-              desc="Look around first — wipe it later in Settings"
-              onClick={loadSample}
-              disabled={busy}
+              icon={FileSpreadsheet}
+              title="Import from BlueCoins"
+              desc="Bring your history over (CSV / XLSX export)"
+              onClick={() => setImportView('bluecoins')}
             />
           </div>
         </>
@@ -91,7 +95,7 @@ export default function Onboarding({ onComplete }) {
           </button>
           <h1 className="mb-1 text-xl font-bold">Your first account</h1>
           <p className="mb-5 text-sm text-txt-secondary">
-            Where your money lives — e.g. "Checking". You can add more later in Settings.
+            Where your money lives, e.g. "Checking". You can add more later in Settings.
           </p>
           <AccountForm onSubmit={createFirstAccount} onCancel={() => setView('menu')} />
         </div>

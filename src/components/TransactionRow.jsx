@@ -22,8 +22,8 @@ export default function TransactionRow({ tx, categoriesById, accountsById, onCli
   let iconColor = category?.color
 
   if (isTransfer) {
-    const from = accountsById.get(tx.fromAccountId)?.name ?? '—'
-    const to = accountsById.get(tx.toAccountId)?.name ?? '—'
+    const from = accountsById.get(tx.fromAccountId)?.name ?? '-'
+    const to = accountsById.get(tx.toAccountId)?.name ?? '-'
     // Fall back to "From → To" when the transfer has no description.
     title = tx.description || `${from} → ${to}`
     subtitle = 'Transfer'

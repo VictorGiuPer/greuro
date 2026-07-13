@@ -1,10 +1,9 @@
 import { CalendarDays } from 'lucide-react'
 import { formatAmount } from '../../lib/format'
 import useCountUp from '../../lib/useCountUp'
-import TrendBadge from './TrendBadge'
 
-/** Income − expenses for the period (transfers excluded), with MoM-style trend. */
-export default function NetEarningsCard({ totals, prevTotals, compareLabel }) {
+/** Income − expenses for the period (transfers excluded). */
+export default function NetEarningsCard({ totals }) {
   const net = useCountUp(totals.net)
   const negative = totals.net < 0
   return (
@@ -19,7 +18,6 @@ export default function NetEarningsCard({ totals, prevTotals, compareLabel }) {
         {negative ? '-' : ''}
         {formatAmount(net)}
       </div>
-      <TrendBadge current={totals.net} previous={prevTotals?.net} compareLabel={compareLabel} />
     </section>
   )
 }

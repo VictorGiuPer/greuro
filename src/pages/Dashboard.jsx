@@ -11,7 +11,7 @@ import {
   cashFlow,
   accountBalances,
 } from '../db'
-import { periodRange, customRange, previousPeriod, todayNoon, addDays } from '../lib/dates'
+import { periodRange, customRange, todayNoon, addDays } from '../lib/dates'
 import { formatDate } from '../lib/format'
 import PeriodPicker from '../components/dashboard/PeriodPicker'
 import SpendingDonut from '../components/dashboard/SpendingDonut'
@@ -23,14 +23,6 @@ import MonthlyReport from '../components/MonthlyReport'
 import Settings from '../components/settings/Settings'
 import TransactionForm from '../components/TransactionForm'
 import Fab from '../components/ui/Fab'
-
-const COMPARE_LABEL = {
-  week: 'vs last week',
-  month: 'vs last month',
-  quarter: 'vs last quarter',
-  year: 'vs last year',
-  custom: 'vs previous period',
-}
 
 /**
  * Overview tab — everything derived live from transactions for the selected
@@ -56,9 +48,7 @@ export default function Dashboard() {
 
   const [spending, setSpending] = useState([])
   const [totals, setTotals] = useState({ income: 0, expense: 0, net: 0 })
-  const [prevTotals, setPrevTotals] = useState(null)
   const [flow, setFlow] = useState(null)
-  const [prevFlow, setPrevFlow] = useState(null)
   const [balances, setBalances] = useState(null)
 
   const range = useMemo(
@@ -98,27 +88,19 @@ export default function Dashboard() {
   useEffect(() => {
     let active = true
     ;(async () => {
-      const prev = previousPeriod(range)
-      const [sp, tot, prevTot, bal] = await Promise.all([
+      const [sp, tot, bal] = await Promise.all([
         spendingByCategory(range),
         incomeExpenseTotals(range),
-        incomeExpenseTotals(prev),
         accountBalances(),
       ])
       let fl = null
-      let prevFl = null
       if (cashFlowAccountId != null) {
-        ;[fl, prevFl] = await Promise.all([
-          cashFlow({ accountId: cashFlowAccountId, from: range.from, to: range.to }),
-          cashFlow({ accountId: cashFlowAccountId, from: prev.from, to: prev.to }),
-        ])
+        fl = await cashFlow({ accountId: cashFlowAccountId, from: range.from, to: range.to })
       }
       if (!active) return
       setSpending(sp)
       setTotals(tot)
-      setPrevTotals(prevTot)
       setFlow(fl)
-      setPrevFlow(prevFl)
       setBalances(bal)
     })()
     return () => {
@@ -142,8 +124,6 @@ export default function Dashboard() {
     setTxFormOpen(false)
     setRefreshToken((n) => n + 1) // re-derive all dashboard numbers
   }
-
-  const compareLabel = COMPARE_LABEL[period.kind]
 
   const periodLabel =
     period.kind === 'custom'
@@ -190,14 +170,12 @@ export default function Dashboard() {
         />
 
         <div className="grid grid-cols-2 gap-4">
-          <NetEarningsCard totals={totals} prevTotals={prevTotals} compareLabel={compareLabel} />
+          <NetEarningsCard totals={totals} />
           <CashFlowCard
             accounts={accounts}
             accountId={cashFlowAccountId}
             onAccountChange={changeCashFlowAccount}
             flow={flow}
-            prevFlow={prevFlow}
-            compareLabel={compareLabel}
           />
         </div>
 

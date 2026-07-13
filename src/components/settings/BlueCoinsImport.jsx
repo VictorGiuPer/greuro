@@ -159,7 +159,7 @@ export default function BlueCoinsImport({ open, onClose, onImported }) {
           <>
             <p className="mb-4 text-sm text-txt-secondary">
               Use a BlueCoins <span className="text-txt-primary">backup file (.fydb)</span> from
-              Settings → Data Management → Backup — it imports accounts with their opening
+              Settings → Data Management → Backup. It imports accounts with their opening
               balances automatically. CSV/XLSX exports work too (with a column-mapping step).
             </p>
             <label className="flex cursor-pointer flex-col items-center gap-3 rounded-card border border-dashed border-white/15 bg-card px-6 py-10 text-center">
@@ -182,7 +182,7 @@ export default function BlueCoinsImport({ open, onClose, onImported }) {
           <>
             <p className="mb-4 text-sm text-txt-secondary">
               Match the file's columns to the app's fields. Common BlueCoins columns were detected
-              automatically — adjust if needed.
+              automatically, adjust if needed.
             </p>
             <div className="space-y-3">
               {TARGET_FIELDS.map((f) => (
@@ -194,7 +194,7 @@ export default function BlueCoinsImport({ open, onClose, onImported }) {
                   <Select
                     value={mapping[f.id] ?? ''}
                     onChange={(v) => setMapping((m) => ({ ...m, [f.id]: v || null }))}
-                    placeholder="— not in file —"
+                    placeholder="not in file"
                     options={headers.map((h) => ({ value: h, label: h }))}
                     ariaLabel={`Column for ${f.label}`}
                   />
@@ -271,7 +271,7 @@ export default function BlueCoinsImport({ open, onClose, onImported }) {
                   </span>
                   <span className="min-w-0 flex-1 truncate text-txt-primary">
                     {t.description ||
-                      (t.type === 'transfer' ? `${t.fromAccount ?? '—'} → ${t.toAccount ?? '—'}` : '—')}
+                      (t.type === 'transfer' ? `${t.fromAccount ?? '-'} → ${t.toAccount ?? '-'}` : '-')}
                   </span>
                   <span
                     className={`shrink-0 tabular-nums ${
@@ -318,7 +318,7 @@ export default function BlueCoinsImport({ open, onClose, onImported }) {
             </p>
             <p className="mb-6 text-sm text-txt-muted">
               {result.accountsCreated} accounts and {result.categoriesCreated} categories were
-              created — adjust their colours & icons in Settings.
+              created. Adjust their colours & icons in Settings.
             </p>
             <button
               onClick={onClose}

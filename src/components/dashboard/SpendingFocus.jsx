@@ -148,7 +148,7 @@ export default function SpendingFocus({ open, onClose, rows, categoriesById, per
                     {formatAmount(s.total)}
                   </span>
                   <span className="w-9 shrink-0 text-right text-xs tabular-nums text-txt-muted">
-                    {pct != null ? `${pct}%` : '—'}
+                    {pct != null ? `${pct}%` : '-'}
                   </span>
                 </button>
               </div>

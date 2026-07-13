@@ -126,7 +126,7 @@ export default function AccountForm({ account, onSubmit, onCancel, onDelete }) {
       {error && <p className="text-sm text-expense">{error}</p>}
       {blockedCount != null && (
         <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-300">
-          Can’t delete — used by {blockedCount} transaction{blockedCount === 1 ? '' : 's'}.
+          Can’t delete: used by {blockedCount} transaction{blockedCount === 1 ? '' : 's'}.
         </p>
       )}
 

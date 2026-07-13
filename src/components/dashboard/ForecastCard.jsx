@@ -203,7 +203,7 @@ export default function ForecastCard({ accounts, balances, scheduled, settings, 
           <p className="mt-2 text-[11px] leading-snug text-txt-muted">
             Illustrative projection from your return assumptions ({settings.returnPess}/
             {settings.returnBase}/{settings.returnOpt} %{adjust ? `, ${settings.inflationRate} % inflation` : ''}
-            ), recurring transactions and the monthly investment above — not a prediction or
+            ), recurring transactions and the monthly investment above. Not a prediction or
             financial advice.
           </p>
         </>

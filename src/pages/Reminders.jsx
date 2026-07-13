@@ -69,7 +69,7 @@ export default function Reminders() {
         <div className="px-6 py-20 text-center text-txt-secondary">
           <p className="mb-1 font-medium text-txt-primary">No reminders yet</p>
           <p className="text-sm">
-            Add recurring payments like rent or subscriptions — they post themselves as
+            Add recurring payments like rent or subscriptions. They post themselves as
             transactions when due.
           </p>
         </div>
@@ -115,8 +115,8 @@ function ReminderRow({ item, categoriesById, accountsById, thresholds, onClick }
 
   let subtitle
   if (isTransfer) {
-    const from = accountsById.get(item.fromAccountId)?.name ?? '—'
-    const to = accountsById.get(item.toAccountId)?.name ?? '—'
+    const from = accountsById.get(item.fromAccountId)?.name ?? '-'
+    const to = accountsById.get(item.toAccountId)?.name ?? '-'
     subtitle = `${from} → ${to} · ${recurrenceLabel(item.recurrence)}`
   } else {
     subtitle = `${category?.name ?? 'Uncategorized'} · ${recurrenceLabel(item.recurrence)}`

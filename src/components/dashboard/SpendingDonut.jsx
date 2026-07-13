@@ -82,7 +82,7 @@ export default function SpendingDonut({ rows, categoriesById, onOpenFocus }) {
             </div>
           </div>
 
-          {/* Legend: name · amount · % */}
+          {/* Legend: name · % of spending (amounts live in the focused view) */}
           <ul className="min-w-0 flex-1 space-y-2">
             {slices.map((s) => (
               <li key={s.name} className="flex items-center gap-2 text-sm">
@@ -93,9 +93,6 @@ export default function SpendingDonut({ rows, categoriesById, onOpenFocus }) {
                 />
                 <span className="min-w-0 flex-1 truncate text-txt-secondary">{s.name}</span>
                 <span className="shrink-0 tabular-nums text-txt-primary">
-                  {formatAmount(s.total)}
-                </span>
-                <span className="w-9 shrink-0 text-right text-xs tabular-nums text-txt-muted">
                   {total > 0 ? Math.round((s.total / total) * 100) : 0}%
                 </span>
               </li>

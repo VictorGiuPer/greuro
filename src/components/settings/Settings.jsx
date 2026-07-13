@@ -25,6 +25,7 @@ import { exportBackupFile } from '../../db/backup'
 import { exportAllWorkbook } from '../../lib/exportXlsx'
 import { formatAmount, formatDate, parseAmountInput, toAmountInputValue } from '../../lib/format'
 import CategoryIcon from '../CategoryIcon'
+import InstallAppButton from '../InstallAppButton'
 import AccountForm from './AccountForm'
 import CategoryForm from './CategoryForm'
 import ImportJson from './ImportJson'
@@ -117,7 +118,7 @@ export default function Settings({ open, onClose, accounts, categories, onChange
     setBusy(true)
     try {
       const seeded = await seedIfEmpty()
-      setDataNote(seeded ? 'Sample data loaded.' : 'Not loaded — you already have data.')
+      setDataNote(seeded ? 'Sample data loaded.' : 'Not loaded: you already have data.')
       if (seeded) await onChanged()
     } finally {
       setBusy(false)
@@ -356,7 +357,7 @@ export default function Settings({ open, onClose, accounts, categories, onChange
                 <DataRow
                   icon={Sprout}
                   title="Load sample data"
-                  subtitle="Only when the app is empty — wipe to remove"
+                  subtitle="Only when the app is empty, wipe to remove"
                   onClick={handleLoadSample}
                   disabled={busy}
                   divider
@@ -372,7 +373,7 @@ export default function Settings({ open, onClose, accounts, categories, onChange
                 </h3>
                 <p className="mb-3 text-xs text-txt-muted">
                   Deletes every account, category, transaction, reminder and setting from this
-                  device. There is no undo — export a backup first.
+                  device. There is no undo. Export a backup first.
                 </p>
                 <div className="flex gap-2">
                   <input
@@ -399,13 +400,15 @@ export default function Settings({ open, onClose, accounts, categories, onChange
               <div className="rounded-card border border-hairline bg-card p-4 text-sm text-txt-secondary">
                 <div className="mb-2 flex items-center gap-2.5">
                   <img src={`${import.meta.env.BASE_URL}logo.png`} alt="" aria-hidden="true" className="h-7 w-7" />
-                  <p className="font-medium text-txt-primary">greuro — grow your euros</p>
+                  <p className="font-medium text-txt-primary">greuro · grow your euros</p>
                 </div>
                 <p className="leading-snug">
                   Local-first personal budgeting. All data lives in this device's browser storage
-                  (IndexedDB) — no cloud, no account, no telemetry. Install it from the browser
-                  menu ("Add to Home Screen") to use it like a native app, offline.
+                  (IndexedDB): no cloud, no account, no telemetry. Install it to use it like a
+                  native app, full-screen and offline.
                 </p>
+                {/* Hides itself when already installed or when the browser can't. */}
+                <InstallAppButton variant="inline" />
               </div>
             </section>
           </>
