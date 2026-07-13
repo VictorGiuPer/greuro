@@ -61,7 +61,7 @@ export default function Reminders() {
 
   return (
     <div className="relative min-h-dvh pb-24">
-      <header className="sticky top-0 z-30 flex min-h-[70px] items-center bg-bg/90 px-4 pb-2 pt-4 backdrop-blur">
+      <header className="safe-pt sticky top-0 z-30 flex min-h-[70px] items-center bg-bg/90 px-4 pb-2 backdrop-blur">
         <h1 className="text-2xl font-semibold text-txt-primary">Upcoming Reminders</h1>
       </header>
 

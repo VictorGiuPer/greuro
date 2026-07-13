@@ -36,6 +36,14 @@ body {
   background-attachment: fixed;
 }
 
+/* Top-edge headers. Installed on iOS the app runs UNDER the translucent status
+   bar (viewport-fit=cover + black-translucent), so header controls collide with
+   the clock/battery. Add the inset on top of the usual 1rem of padding. On
+   Android and in-browser the inset resolves to 0, so nothing shifts. */
+.safe-pt {
+  padding-top: calc(1rem + env(safe-area-inset-top));
+}
+
 /* Slide-in overlays: hide fully once the slide-out finishes, so the closed
    panel can't peek in from the edge on viewports wider than 430px. */
 .overlay-open {

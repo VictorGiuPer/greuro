@@ -66,7 +66,7 @@ export default function MonthlyReport({ open, onClose, categoriesById }) {
       aria-label="Monthly report"
       aria-hidden={open ? undefined : 'true'}
     >
-      <header className="flex items-center gap-3 border-b border-hairline px-4 py-4">
+      <header className="safe-pt flex items-center gap-3 border-b border-hairline px-4 pb-4">
         <button
           onClick={onClose}
           aria-label="Back"

@@ -138,7 +138,7 @@ export default function Transactions() {
   return (
     <div className="relative min-h-dvh pb-24">
       {/* Header: search + filter stub */}
-      <header className="sticky top-0 z-30 bg-bg/90 px-4 pb-2 pt-4 backdrop-blur">
+      <header className="safe-pt sticky top-0 z-30 bg-bg/90 px-4 pb-2 backdrop-blur">
         <div className="flex items-center gap-2">
           <div className="flex flex-1 items-center gap-2 rounded-2xl border border-hairline bg-card px-3.5 py-2.5">
             <Search size={18} className="text-txt-muted" />

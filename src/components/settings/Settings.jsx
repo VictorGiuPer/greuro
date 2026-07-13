@@ -188,7 +188,7 @@ export default function Settings({ open, onClose, accounts, categories, onChange
       }`}
     >
       {/* Header */}
-      <header className="flex items-center gap-3 border-b border-hairline px-4 py-4">
+      <header className="safe-pt flex items-center gap-3 border-b border-hairline px-4 pb-4">
         <button
           onClick={() => (editor ? setEditor(null) : onClose())}
           aria-label="Back"

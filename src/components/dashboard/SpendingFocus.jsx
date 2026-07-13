@@ -57,7 +57,7 @@ export default function SpendingFocus({ open, onClose, rows, categoriesById, per
         open ? 'overlay-open translate-x-0' : 'overlay-closed pointer-events-none translate-x-full'
       }`}
     >
-      <header className="flex items-center gap-3 border-b border-hairline px-4 py-4">
+      <header className="safe-pt flex items-center gap-3 border-b border-hairline px-4 pb-4">
         <button
           onClick={onClose}
           aria-label="Back"

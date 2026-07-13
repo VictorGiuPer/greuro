@@ -143,7 +143,7 @@ export default function BlueCoinsImport({ open, onClose, onImported }) {
       aria-label="Import from BlueCoins"
       aria-hidden={open ? undefined : 'true'}
     >
-      <header className="flex items-center gap-3 border-b border-hairline px-4 py-4">
+      <header className="safe-pt flex items-center gap-3 border-b border-hairline px-4 pb-4">
         <button
           onClick={() => (stage === 'map' || stage === 'preview' ? setStage('pick') : onClose())}
           aria-label="Back"
