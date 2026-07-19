@@ -25,8 +25,10 @@ export const SETTINGS_DEFAULTS = {
   onboarded: false,
   // Data management.
   lastBackupAt: null,
-  // Dashboard: which account the Cash Flow card shows.
+  // Dashboard: which account the Cash Flow card shows (falls back to main).
   cashFlowAccountId: null,
+  // The everyday account the savings tracker + cash-flow default use.
+  mainAccountId: null,
 }
 
 /** All settings merged over defaults -> plain object. */

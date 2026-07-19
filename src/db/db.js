@@ -69,3 +69,20 @@ db.version(2).stores({
   scheduled: '++id, nextDueDate, active',
   settings: '&key',
 })
+
+/**
+ * v3 (additive):
+ *
+ * goals (savings goals — progress is DERIVED, never stored, so it always
+ * reflects the latest month-end automatically):
+ *   id, name, targetAmount, startYear, startMonth (0-based; accumulation
+ *   counts completed calendar months from here), archived (0|1),
+ *   createdAt, updatedAt
+ *
+ * Accounts gained a non-indexed `usage` ('active'|'investment') field and
+ * categories a non-indexed `excludeFromStats` flag — neither is indexed, so
+ * no schema change is needed for them.
+ */
+db.version(3).stores({
+  goals: '++id',
+})

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { X, Trash2 } from 'lucide-react'
 import {
   addTransaction,
@@ -6,6 +6,8 @@ import {
   deleteTransaction,
   addAccount,
   addCategory,
+  getDescriptionSuggestions,
+  accountUsage,
 } from '../db'
 import { toDateInputValue, fromDateInputValue, toAmountInputValue } from '../lib/format'
 import { evaluate } from '../lib/calc'
@@ -64,6 +66,10 @@ export default function TransactionForm({
   const [saving, setSaving] = useState(false)
   // Inline quick-create: null | 'account' | 'from' | 'to' | 'category'
   const [mini, setMini] = useState(null)
+  // Autofill memory: recent distinct descriptions matching what's typed.
+  const [suggestions, setSuggestions] = useState([])
+  // Description value we last prefilled/loaded — suppresses re-suggesting it.
+  const appliedDescRef = useRef('')
 
   const isEdit = Boolean(editingTx)
 
@@ -75,9 +81,46 @@ export default function TransactionForm({
     setError('')
     setConfirmDelete(false)
     setMini(null)
+    setSuggestions([])
+    appliedDescRef.current = editingTx?.description || ''
     const t = setTimeout(() => document.getElementById('tx-amount')?.focus(), 80)
     return () => clearTimeout(t)
   }, [open, editingTx])
+
+  // Debounced description-memory lookup: only while typing something new
+  // (≥2 chars) that we didn't just prefill.
+  useEffect(() => {
+    if (!open || mini) return
+    const desc = form.description.trim()
+    if (desc.length < 2 || desc === appliedDescRef.current.trim()) {
+      setSuggestions([])
+      return
+    }
+    let active = true
+    const t = setTimeout(async () => {
+      const res = await getDescriptionSuggestions(desc, 4)
+      if (active) setSuggestions(res)
+    }, 150)
+    return () => {
+      active = false
+      clearTimeout(t)
+    }
+  }, [form.description, open, mini])
+
+  // Prefill everything except the amount from a remembered transaction.
+  function applySuggestion(s) {
+    appliedDescRef.current = s.description
+    setSuggestions([])
+    setForm((f) => ({
+      ...f,
+      description: s.description,
+      type: s.type,
+      categoryId: s.categoryId != null ? String(s.categoryId) : '',
+      accountId: s.accountId != null ? String(s.accountId) : '',
+      fromAccountId: s.fromAccountId != null ? String(s.fromAccountId) : '',
+      toAccountId: s.toAccountId != null ? String(s.toAccountId) : '',
+    }))
+  }
 
   const set = (patch) => setForm((f) => ({ ...f, ...patch }))
 
@@ -177,7 +220,13 @@ export default function TransactionForm({
     setMini(null)
   }
 
+  // Transfers can use any account; expense/income only "active use" accounts
+  // (plus the currently-selected one in edit mode, so an old row still works).
   const accountOptions = accounts.map((a) => ({ value: a.id, label: a.name }))
+  const selectedAccountId = Number(form.accountId)
+  const activeAccountOptions = accounts
+    .filter((a) => accountUsage(a) === 'active' || a.id === selectedAccountId)
+    .map((a) => ({ value: a.id, label: a.name }))
 
   const miniTitle =
     mini === 'category' ? 'Add Category' : mini ? 'Add Account' : null
@@ -237,7 +286,6 @@ export default function TransactionForm({
                   id="tx-amount"
                   value={form.amount}
                   onChange={(v) => set({ amount: v })}
-                  autoFocus
                 />
               </div>
 
@@ -262,6 +310,29 @@ export default function TransactionForm({
                   placeholder={form.type === 'transfer' ? 'Optional' : 'Merchant or name'}
                   className="w-full rounded-2xl border border-hairline bg-elevated px-4 py-3 text-txt-primary placeholder:text-txt-muted focus:outline-none focus:ring-1 focus:ring-accent/50"
                 />
+                {/* Autofill suggestions from past transactions */}
+                {suggestions.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {suggestions.map((s) => {
+                      const acctId =
+                        s.type === 'transfer' ? s.fromAccountId : s.accountId
+                      const acct = accounts.find((a) => a.id === acctId)?.name
+                      const cat = categories.find((c) => c.id === s.categoryId)?.name
+                      const hint = [cat, acct].filter(Boolean).join(' · ')
+                      return (
+                        <button
+                          key={s.description}
+                          type="button"
+                          onClick={() => applySuggestion(s)}
+                          className="flex max-w-full items-center gap-1.5 rounded-full border border-accent/40 bg-accent/10 px-3 py-1.5 text-left text-xs text-accent"
+                        >
+                          <span className="font-medium">{s.description}</span>
+                          {hint && <span className="truncate text-accent/60">{hint}</span>}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Account(s) */}
@@ -295,7 +366,7 @@ export default function TransactionForm({
                     value={form.accountId}
                     onChange={(v) => set({ accountId: v })}
                     placeholder="Choose account"
-                    options={accountOptions}
+                    options={activeAccountOptions}
                     onAddNew={() => setMini('account')}
                   />
                 </div>

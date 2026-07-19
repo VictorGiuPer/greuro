@@ -18,7 +18,9 @@ import {
   deleteCategory,
   getSettings,
   setSettings,
+  setSetting,
   seedIfEmpty,
+  accountUsage,
 } from '../../db'
 import { wipeAllData } from '../../db/maintenance'
 import { exportBackupFile } from '../../db/backup'
@@ -49,6 +51,7 @@ export default function Settings({ open, onClose, accounts, categories, onChange
   const [wipeText, setWipeText] = useState('')
   const [busy, setBusy] = useState(false)
   const [lastBackupAt, setLastBackupAt] = useState(null)
+  const [mainAccountId, setMainAccountId] = useState(null)
 
   // Reset + (re)load preferences whenever the overlay is (re)opened.
   useEffect(() => {
@@ -60,6 +63,7 @@ export default function Settings({ open, onClose, accounts, categories, onChange
     setWipeText('')
     getSettings().then((s) => {
       setLastBackupAt(s.lastBackupAt)
+      setMainAccountId(s.mainAccountId)
       setPrefs({
         returnPess: toAmountInputValue(s.returnPess),
         returnBase: toAmountInputValue(s.returnBase),
@@ -141,8 +145,16 @@ export default function Settings({ open, onClose, accounts, categories, onChange
   const incomeCats = categories.filter((c) => c.kind === 'income')
 
   async function submitAccount(data) {
+    const id = editor.item ? editor.item.id : await addAccount(data)
     if (editor.item) await updateAccount(editor.item.id, data)
-    else await addAccount(data)
+    // Persist the "main account" tag (a single-value setting).
+    if (data.isMain === true) {
+      await setSetting('mainAccountId', id)
+      setMainAccountId(id)
+    } else if (data.isMain === false && mainAccountId === id) {
+      await setSetting('mainAccountId', null)
+      setMainAccountId(null)
+    }
     await onChanged()
     setEditor(null)
   }
@@ -207,6 +219,7 @@ export default function Settings({ open, onClose, accounts, categories, onChange
               onSubmit={submitAccount}
               onCancel={() => setEditor(null)}
               onDelete={editor.item ? onDeleteAccount : undefined}
+              isMain={editor.item ? mainAccountId === editor.item.id : false}
             />
           ) : (
             <CategoryForm
@@ -233,7 +246,19 @@ export default function Settings({ open, onClose, accounts, categories, onChange
                     onClick={() => setEditor({ type: 'account', item: a })}
                     left={
                       <div>
-                        <div className="font-medium text-txt-primary">{a.name}</div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-medium text-txt-primary">{a.name}</span>
+                          {mainAccountId === a.id && (
+                            <span className="rounded-full bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-accent">
+                              Main
+                            </span>
+                          )}
+                          {accountUsage(a) === 'investment' && (
+                            <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-txt-secondary">
+                              Investment
+                            </span>
+                          )}
+                        </div>
                         <div className="text-sm text-txt-secondary">
                           <span className="capitalize">{a.type}</span> · {formatAmount(a.startingBalance)}
                           {' · '}

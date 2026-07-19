@@ -106,3 +106,26 @@ describe('monthlyReport', () => {
     expect(r.topCategories[0]).toEqual({ categoryId: rent, total: 900 })
   })
 })
+
+describe('balance-only (excludeFromStats) categories', () => {
+  it('adjustment expense hits balances but is invisible to stats', async () => {
+    // A quarterly correction: -400 on checking, in an excluded category.
+    const adjust = await db.categories.add({
+      name: 'Adjustment', kind: 'expense', color: '#fff', icon: 'Circle', excludeFromStats: true,
+    })
+    await db.transactions.add({
+      type: 'expense', amount: 400, date: noon(2026, 4, 25), description: 'Q2 adjust',
+      categoryId: adjust, accountId: checking, fromAccountId: null, toAccountId: null,
+    })
+
+    const may = { from: noon(2026, 4, 1), to: noon(2026, 4, 31) }
+    // Cash flow / spending / net earnings ignore it.
+    const cf = await cashFlow({ accountId: checking, ...may })
+    expect(cf.outflow).toBe(800 + 200 + 500 + 300) // no +400
+    expect((await spendingByCategory(may)).some((r) => r.categoryId === adjust)).toBe(false)
+    expect((await incomeExpenseTotals(may)).expense).toBe(1000) // no +400
+    // But the balance / net worth DID move by -400.
+    expect((await accountBalances()).get(checking)).toBe(4300 - 400)
+    expect(await netWorthAt()).toBe(4300 - 400 + 5500 - 1700)
+  })
+})

@@ -78,7 +78,7 @@ export default function ForecastCard({ accounts, balances, scheduled, settings, 
   return (
     <section className="rounded-card border border-hairline bg-card p-4">
       <div className="mb-1 flex items-center justify-between gap-2">
-        <h2 className="text-sm font-medium text-txt-secondary">Net Worth Forecast</h2>
+        <h2 className="text-sm font-medium text-txt-secondary">Investment Growth</h2>
         {/* Horizon selector */}
         <div
           className="flex rounded-full border border-hairline bg-elevated p-0.5"
@@ -103,7 +103,7 @@ export default function ForecastCard({ accounts, balances, scheduled, settings, 
 
       {data.length === 0 ? (
         <p className="py-8 text-center text-sm text-txt-muted">
-          Add an account to see a projection.
+          Mark an account as “Investment” in Settings to project its growth.
         </p>
       ) : (
         <>

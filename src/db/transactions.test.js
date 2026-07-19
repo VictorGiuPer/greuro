@@ -1,6 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { db } from './db'
-import { getTransactionsPage, addTransaction } from './transactions'
+import {
+  getTransactionsPage,
+  addTransaction,
+  getDescriptionSuggestions,
+} from './transactions'
 import { noon, startOfDayMs, endOfDayMs } from '../lib/dates'
 
 let a1, a2, catFood, catPay
@@ -80,5 +84,52 @@ describe('getTransactionsPage filters', () => {
   it('empty filters return everything', async () => {
     const rows = await collectAllPages(null, 4)
     expect(rows).toHaveLength(10)
+  })
+})
+
+describe('getDescriptionSuggestions', () => {
+  beforeEach(async () => {
+    // Two "Aldi" rows (one older, different account) + others.
+    await addTransaction({
+      type: 'expense', amount: 20, date: noon(2026, 6, 2),
+      description: 'Aldi', categoryId: catFood, accountId: a2,
+    })
+    await addTransaction({
+      type: 'expense', amount: 33, date: noon(2026, 6, 10),
+      description: 'Aldi', categoryId: catFood, accountId: a1,
+    })
+    await addTransaction({
+      type: 'income', amount: 500, date: noon(2026, 6, 11),
+      description: 'Aldi refund', categoryId: catPay, accountId: a1,
+    })
+  })
+
+  it('returns distinct descriptions matching the prefix, newest first', async () => {
+    const res = await getDescriptionSuggestions('aldi')
+    // "Aldi" (deduped to the newest) + "Aldi refund".
+    expect(res.map((r) => r.description)).toEqual(['Aldi refund', 'Aldi'])
+  })
+
+  it('dedupes to the most recent occurrence (account from newest row)', async () => {
+    const res = await getDescriptionSuggestions('Aldi')
+    const aldi = res.find((r) => r.description === 'Aldi')
+    expect(aldi.accountId).toBe(a1) // the newer of the two Aldi rows
+    expect(aldi.categoryId).toBe(catFood)
+    expect(aldi.type).toBe('expense')
+  })
+
+  it('is case-insensitive and prefix-anchored', async () => {
+    expect(await getDescriptionSuggestions('ald')).toHaveLength(2)
+    expect(await getDescriptionSuggestions('refund')).toHaveLength(0) // not a prefix
+  })
+
+  it('empty/blank prefix returns nothing', async () => {
+    expect(await getDescriptionSuggestions('')).toEqual([])
+    expect(await getDescriptionSuggestions('   ')).toEqual([])
+  })
+
+  it('respects the limit', async () => {
+    const res = await getDescriptionSuggestions('cafe', 3)
+    expect(res).toHaveLength(3)
   })
 })

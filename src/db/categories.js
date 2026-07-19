@@ -23,6 +23,8 @@ export async function addCategory(data) {
     kind: data.kind === 'income' ? 'income' : 'expense',
     color: data.color || '#818CF8',
     icon: data.icon || 'Circle',
+    // "Balance only": still moves account balances, but ignored by stats.
+    excludeFromStats: Boolean(data.excludeFromStats),
     createdAt: now,
     updatedAt: now,
   })
@@ -34,6 +36,7 @@ export async function updateCategory(id, patch) {
   if (patch.kind != null) clean.kind = patch.kind === 'income' ? 'income' : 'expense'
   if (patch.color != null) clean.color = patch.color
   if (patch.icon != null) clean.icon = patch.icon
+  if (patch.excludeFromStats != null) clean.excludeFromStats = Boolean(patch.excludeFromStats)
   return db.categories.update(id, clean)
 }
 

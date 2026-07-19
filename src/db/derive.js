@@ -67,16 +67,29 @@ function txInRange(from, to) {
 }
 
 /**
+ * Category ids flagged `excludeFromStats` ("balance only"). Their transactions
+ * still move account balances / net worth, but are ignored by cash flow, net
+ * earnings and spending — so quarterly balance corrections don't distort a
+ * month's stats.
+ */
+async function excludedCategoryIds() {
+  const cats = await db.categories.filter((c) => Boolean(c.excludeFromStats)).toArray()
+  return new Set(cats.map((c) => c.id))
+}
+
+/**
  * Cash flow for ONE account over a period — transfers COUNT (this card shows
  * the account's health, so money moving in/out matters regardless of type).
  * @returns {{ inflow: number, outflow: number, net: number }}
  */
 export async function cashFlow({ accountId, from, to }) {
-  const txs = await txInRange(from, to)
+  const [txs, excluded] = await Promise.all([txInRange(from, to), excludedCategoryIds()])
   let inflow = 0
   let outflow = 0
   for (const t of txs) {
     const amt = Number(t.amount) || 0
+    // Balance-only categories (e.g. quarterly adjustments) don't count as flow.
+    if ((t.type === 'income' || t.type === 'expense') && excluded.has(t.categoryId)) continue
     if (t.type === 'income' && t.accountId === accountId) inflow += amt
     else if (t.type === 'expense' && t.accountId === accountId) outflow += amt
     else if (t.type === 'transfer') {
@@ -93,10 +106,11 @@ export async function cashFlow({ accountId, from, to }) {
  * @returns {Promise<Array<{ categoryId: number|null, total: number }>>}
  */
 export async function spendingByCategory({ from, to }) {
-  const txs = await txInRange(from, to)
+  const [txs, excluded] = await Promise.all([txInRange(from, to), excludedCategoryIds()])
   const totals = new Map()
   for (const t of txs) {
     if (t.type !== 'expense') continue
+    if (excluded.has(t.categoryId)) continue
     const key = t.categoryId ?? null
     totals.set(key, (totals.get(key) || 0) + (Number(t.amount) || 0))
   }
@@ -110,10 +124,11 @@ export async function spendingByCategory({ from, to }) {
  * @returns {{ income: number, expense: number, net: number }}
  */
 export async function incomeExpenseTotals({ from, to }) {
-  const txs = await txInRange(from, to)
+  const [txs, excluded] = await Promise.all([txInRange(from, to), excludedCategoryIds()])
   let income = 0
   let expense = 0
   for (const t of txs) {
+    if (excluded.has(t.categoryId)) continue
     const amt = Number(t.amount) || 0
     if (t.type === 'income') income += amt
     else if (t.type === 'expense') expense += amt

@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { X, Trash2 } from 'lucide-react'
-import { addScheduled, updateScheduled, deleteScheduled, addAccount, addCategory } from '../db'
+import {
+  addScheduled,
+  updateScheduled,
+  deleteScheduled,
+  addAccount,
+  addCategory,
+  accountUsage,
+} from '../db'
 import { toDateInputValue, fromDateInputValue, toAmountInputValue } from '../lib/format'
 import { evaluate } from '../lib/calc'
 import SegmentedPill from './SegmentedPill'
@@ -202,6 +209,10 @@ export default function ReminderForm({
   }
 
   const accountOptions = accounts.map((a) => ({ value: a.id, label: a.name }))
+  const selectedAccountId = Number(form.accountId)
+  const activeAccountOptions = accounts
+    .filter((a) => accountUsage(a) === 'active' || a.id === selectedAccountId)
+    .map((a) => ({ value: a.id, label: a.name }))
   const miniTitle = mini === 'category' ? 'Add Category' : mini ? 'Add Account' : null
 
   return (
@@ -352,7 +363,7 @@ export default function ReminderForm({
                 value={form.accountId}
                 onChange={(v) => set({ accountId: v })}
                 placeholder="Choose account"
-                options={accountOptions}
+                options={activeAccountOptions}
                 onAddNew={() => setMini('account')}
               />
             </div>

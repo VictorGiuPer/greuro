@@ -17,7 +17,7 @@ function buildFixture() {
     CREATE TABLE ITEMTABLE (itemTableID INTEGER PRIMARY KEY, itemName TEXT);
     CREATE TABLE CHILDCATEGORYTABLE (categoryTableID INTEGER PRIMARY KEY, childCategoryName TEXT);
     CREATE TABLE ACCOUNTSTABLE (accountsTableID INTEGER PRIMARY KEY, accountName TEXT, accountTypeID INTEGER);
-    CREATE TABLE ACCOUNTTYPETABLE (accountTypeTableID INTEGER PRIMARY KEY, accountingGroupID INTEGER);
+    CREATE TABLE ACCOUNTTYPETABLE (accountTypeTableID INTEGER PRIMARY KEY, accountTypeName TEXT, accountingGroupID INTEGER);
     CREATE TABLE TRANSACTIONSTABLE (
       transactionsTableID INTEGER PRIMARY KEY, itemID INTEGER, amount INTEGER, date TEXT,
       transactionTypeID INTEGER, categoryID INTEGER, accountID INTEGER, accountPairID INTEGER,
@@ -25,8 +25,9 @@ function buildFixture() {
     );
   `)
   const run = (sql) => db.exec(sql)
-  run(`INSERT INTO ACCOUNTTYPETABLE VALUES (3, 1), (4, 2)`) // 1=Assets, 2=Liabilities
-  run(`INSERT INTO ACCOUNTSTABLE VALUES (-1, '(No Account)', 0), (1, 'Giro', 3), (2, 'Depot', 3), (3, 'Loan', 4)`)
+  // 3=Bank(Assets), 4=liability, 5=Investments(Assets)
+  run(`INSERT INTO ACCOUNTTYPETABLE VALUES (3, 'Bank', 1), (4, 'Other Liabilities', 2), (5, 'Investments', 1)`)
+  run(`INSERT INTO ACCOUNTSTABLE VALUES (-1, '(No Account)', 0), (1, 'Giro', 3), (2, 'Depot', 5), (3, 'Loan', 4)`)
   run(`INSERT INTO ITEMTABLE VALUES (1, 'Döner'), (2, 'Investment Jul'), (3, '(System Generated Account)'), (4, 'Salary')`)
   run(`INSERT INTO CHILDCATEGORYTABLE VALUES (10, 'Eating Out'), (11, 'Salary')`)
 
@@ -104,9 +105,10 @@ describe('parseBlueCoinsSqlite', () => {
 
   it('builds account defs with types and opening balances', () => {
     const { accountDefs } = parseBlueCoinsSqlite(SQL, bytes)
-    expect(accountDefs.get('giro')).toEqual({ name: 'Giro', type: 'asset', startingBalance: 650 })
-    expect(accountDefs.get('loan')).toEqual({ name: 'Loan', type: 'liability', startingBalance: 2000 })
-    expect(accountDefs.get('depot')).toEqual({ name: 'Depot', type: 'asset', startingBalance: 0 })
+    expect(accountDefs.get('giro')).toEqual({ name: 'Giro', type: 'asset', usage: 'active', startingBalance: 650 })
+    expect(accountDefs.get('loan')).toEqual({ name: 'Loan', type: 'liability', usage: 'active', startingBalance: 2000 })
+    // "Investments" account type maps to usage 'investment'.
+    expect(accountDefs.get('depot')).toEqual({ name: 'Depot', type: 'asset', usage: 'investment', startingBalance: 0 })
     expect(accountDefs.has('(no account)')).toBe(false)
   })
 
@@ -120,8 +122,9 @@ describe('parseBlueCoinsSqlite', () => {
       CREATE TABLE ITEMTABLE (itemTableID INTEGER PRIMARY KEY, itemName TEXT);
       CREATE TABLE CHILDCATEGORYTABLE (categoryTableID INTEGER PRIMARY KEY, childCategoryName TEXT);
       CREATE TABLE ACCOUNTSTABLE (accountsTableID INTEGER PRIMARY KEY, accountName TEXT, accountTypeID INTEGER);
-      CREATE TABLE ACCOUNTTYPETABLE (accountTypeTableID INTEGER PRIMARY KEY, accountingGroupID INTEGER);
+      CREATE TABLE ACCOUNTTYPETABLE (accountTypeTableID INTEGER PRIMARY KEY, accountTypeName TEXT, accountingGroupID INTEGER);
       CREATE TABLE TRANSACTIONSTABLE (transactionsTableID INTEGER PRIMARY KEY, itemID INTEGER, amount INTEGER, date TEXT, transactionTypeID INTEGER, categoryID INTEGER, accountID INTEGER, accountPairID INTEGER, notes TEXT, deletedTransaction INTEGER);
+      INSERT INTO ACCOUNTTYPETABLE VALUES (3, 'Bank', 1);
       INSERT INTO ACCOUNTSTABLE VALUES (1, 'Giro', 3);
       INSERT INTO TRANSACTIONSTABLE VALUES (1, NULL, ${-5 * M}, '${stamp}', 3, NULL, 1, NULL, 'today row', 6);
       INSERT INTO TRANSACTIONSTABLE VALUES (2, NULL, ${-5 * M}, '${new Date(addDays(todayNoon(), 1)).toISOString().slice(0, 10)} 09:00:00', 3, NULL, 1, NULL, 'tomorrow row', 6);

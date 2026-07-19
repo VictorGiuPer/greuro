@@ -73,18 +73,22 @@ export function parseBlueCoinsSqlite(SQL, bytes) {
     )
     const accountRows = rows(
       db,
-      `SELECT a.accountsTableID id, a.accountName name, IFNULL(t.accountingGroupID, 1) groupId
+      `SELECT a.accountsTableID id, a.accountName name, IFNULL(t.accountingGroupID, 1) groupId,
+              IFNULL(t.accountTypeName, '') typeName
        FROM ACCOUNTSTABLE a LEFT JOIN ACCOUNTTYPETABLE t ON t.accountTypeTableID = a.accountTypeID
        WHERE a.accountsTableID > 0`,
     )
     const accountName = new Map(accountRows.map((r) => [r.id, r.name]))
 
-    // Account definitions with type; opening balances come from type-2 rows.
+    // Account definitions with type + usage; opening balances come from
+    // type-2 rows. BlueCoins "Investments" accounts map to usage 'investment'
+    // so they feed greuro's growth forecast (and are transfer-only).
     const accountDefs = new Map()
     for (const r of accountRows) {
       accountDefs.set(String(r.name).trim().toLowerCase(), {
         name: String(r.name).trim(),
         type: r.groupId === 2 ? 'liability' : 'asset',
+        usage: /investment/i.test(r.typeName) ? 'investment' : 'active',
         startingBalance: 0,
       })
     }

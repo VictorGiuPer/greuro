@@ -9,14 +9,17 @@ import { parseAmountInput, toAmountInputValue } from '../../lib/format'
  * returns { ok } or { ok:false, count } from the integrity guard.
  *
  * @param account   existing account (edit) or null (add)
- * @param onSubmit  async (data) => void
+ * @param onSubmit  async (data) => void  (data includes usage + isMain)
  * @param onCancel  () => void
  * @param onDelete  async () => ({ ok } | { ok:false, count })  (edit only)
+ * @param isMain    when defined, shows the "Main account" switch (Settings only)
  */
-export default function AccountForm({ account, onSubmit, onCancel, onDelete }) {
+export default function AccountForm({ account, onSubmit, onCancel, onDelete, isMain }) {
   const isEdit = Boolean(account)
   const [name, setName] = useState(account?.name ?? '')
   const [type, setType] = useState(account?.type ?? 'asset')
+  const [usage, setUsage] = useState(account?.usage === 'investment' ? 'investment' : 'active')
+  const [main, setMain] = useState(Boolean(isMain))
   const [startingBalance, setStartingBalance] = useState(
     account ? toAmountInputValue(account.startingBalance) : '',
   )
@@ -28,6 +31,10 @@ export default function AccountForm({ account, onSubmit, onCancel, onDelete }) {
   const [blockedCount, setBlockedCount] = useState(null)
   const [busy, setBusy] = useState(false)
 
+  // Only Settings passes isMain; the main switch is meaningful for
+  // everyday (active) accounts, which the cash-flow card defaults to.
+  const showMain = isMain !== undefined && usage === 'active'
+
   async function handleSubmit() {
     if (!name.trim()) {
       setError('Enter an account name.')
@@ -38,6 +45,8 @@ export default function AccountForm({ account, onSubmit, onCancel, onDelete }) {
       await onSubmit({
         name,
         type,
+        usage,
+        isMain: showMain ? main : undefined,
         startingBalance: parseAmountInput(startingBalance) || 0,
         expectedAnnualReturn: parseAmountInput(expectedAnnualReturn) || 0,
       })
@@ -87,6 +96,51 @@ export default function AccountForm({ account, onSubmit, onCancel, onDelete }) {
           ]}
         />
       </div>
+
+      <div>
+        <label className="mb-1.5 block text-sm text-txt-secondary">Usage</label>
+        <SegmentedPill
+          value={usage}
+          onChange={setUsage}
+          options={[
+            { id: 'active', label: 'Active use' },
+            { id: 'investment', label: 'Investment' },
+          ]}
+        />
+        <p className="mt-1.5 text-xs text-txt-muted">
+          {usage === 'investment'
+            ? 'Grows in the forecast; offered only for transfers, not everyday expenses.'
+            : 'Everyday money; offered for expenses, income and transfers.'}
+        </p>
+      </div>
+
+      {showMain && (
+        <button
+          type="button"
+          role="switch"
+          aria-checked={main}
+          onClick={() => setMain((m) => !m)}
+          className="flex w-full items-center justify-between rounded-2xl border border-hairline bg-elevated px-4 py-3"
+        >
+          <span className="text-left">
+            <span className="block text-txt-primary">Main account</span>
+            <span className="block text-xs text-txt-muted">
+              Default for the cash-flow card and the savings tracker.
+            </span>
+          </span>
+          <span
+            className={`ml-3 flex h-7 w-12 shrink-0 items-center rounded-full p-1 transition-colors ${
+              main ? 'bg-accent' : 'bg-white/10'
+            }`}
+          >
+            <span
+              className={`h-5 w-5 rounded-full bg-white transition-transform ${
+                main ? 'translate-x-5' : ''
+              }`}
+            />
+          </span>
+        </button>
+      )}
 
       <div>
         <label className="mb-1.5 block text-sm text-txt-secondary">Starting balance</label>

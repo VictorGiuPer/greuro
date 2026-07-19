@@ -2,6 +2,18 @@ import { db } from './db'
 
 /** Account reads + writes, with a referential-integrity guard on delete. */
 
+/**
+ * How an account is used:
+ *   - 'active'     everyday money; offered for expense/income and transfers,
+ *                  excluded from the investment growth forecast.
+ *   - 'investment' return-bearing; offered only for transfers (you move money
+ *                  into it), and it's what the growth forecast projects.
+ * Legacy rows without the field are treated as 'active'.
+ */
+export function accountUsage(account) {
+  return account?.usage === 'investment' ? 'investment' : 'active'
+}
+
 export function getAccounts() {
   return db.accounts.orderBy('name').toArray()
 }
@@ -21,6 +33,7 @@ export async function addAccount(data) {
   return db.accounts.add({
     name: (data.name ?? '').trim(),
     type: data.type === 'liability' ? 'liability' : 'asset',
+    usage: data.usage === 'investment' ? 'investment' : 'active',
     startingBalance: Number(data.startingBalance) || 0,
     expectedAnnualReturn: Number(data.expectedAnnualReturn) || 0,
     createdAt: now,
@@ -32,6 +45,7 @@ export async function updateAccount(id, patch) {
   const clean = { updatedAt: Date.now() }
   if (patch.name != null) clean.name = String(patch.name).trim()
   if (patch.type != null) clean.type = patch.type === 'liability' ? 'liability' : 'asset'
+  if (patch.usage != null) clean.usage = patch.usage === 'investment' ? 'investment' : 'active'
   if (patch.startingBalance != null) clean.startingBalance = Number(patch.startingBalance) || 0
   if (patch.expectedAnnualReturn != null)
     clean.expectedAnnualReturn = Number(patch.expectedAnnualReturn) || 0

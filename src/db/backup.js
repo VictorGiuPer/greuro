@@ -3,34 +3,36 @@ import { setSetting } from './settings'
 
 /**
  * JSON backup / restore — the complete, versioned dump of everything
- * (accounts, categories, transactions, scheduled, settings).
+ * (accounts, categories, transactions, scheduled, settings, goals).
  *
  * Restore modes:
- *   - replace: wipe all five tables and load the backup verbatim,
- *     PRESERVING ids → export→import round-trips losslessly.
+ *   - replace: wipe all tables and load the backup verbatim, PRESERVING ids
+ *     → export→import round-trips losslessly.
  *   - merge: reuse existing accounts (matched by case-insensitive name) and
  *     categories (name + kind); everything else is inserted with fresh ids
  *     and remapped references. Settings are NOT overwritten in merge mode.
  *
  * Nothing is written until applyBackup() — validateBackup() is the read-only
- * preview step.
+ * preview step. `goals` is optional so older backups still import cleanly.
  */
 
 export const BACKUP_FORMAT = 'budget-app-backup'
 export const BACKUP_VERSION = 1
 
-const TABLES = ['accounts', 'categories', 'transactions', 'scheduled', 'settings']
+const TABLES = ['accounts', 'categories', 'transactions', 'scheduled', 'settings', 'goals']
+// Tables an older backup file MUST contain; goals may be absent (older export).
+const REQUIRED_TABLES = ['accounts', 'categories', 'transactions', 'scheduled', 'settings']
 
 /** Read the whole database into a plain versioned object. */
 export async function buildBackup() {
-  const [accounts, categories, transactions, scheduled, settings] = await Promise.all(
+  const [accounts, categories, transactions, scheduled, settings, goals] = await Promise.all(
     TABLES.map((t) => db[t].toArray()),
   )
   return {
     format: BACKUP_FORMAT,
     version: BACKUP_VERSION,
     exportedAt: new Date().toISOString(),
-    data: { accounts, categories, transactions, scheduled, settings },
+    data: { accounts, categories, transactions, scheduled, settings, goals },
   }
 }
 
@@ -58,10 +60,12 @@ export function validateBackup(obj) {
     return { ok: false, error: `Unsupported backup version ${obj.version}.` }
   if (!obj.data || typeof obj.data !== 'object') return { ok: false, error: 'Backup has no data.' }
   const counts = {}
-  for (const t of TABLES) {
+  for (const t of REQUIRED_TABLES) {
     if (!Array.isArray(obj.data[t])) return { ok: false, error: `Backup is missing "${t}".` }
     counts[t] = obj.data[t].length
   }
+  // goals is optional (absent in pre-v3 exports).
+  counts.goals = Array.isArray(obj.data.goals) ? obj.data.goals.length : 0
   const badTx = obj.data.transactions.find(
     (t) => typeof t.amount !== 'number' || typeof t.date !== 'number' || !t.type,
   )
@@ -81,8 +85,9 @@ export async function applyBackup(obj, mode) {
   const valid = validateBackup(obj)
   if (!valid.ok) throw new Error(valid.error)
   const { accounts, categories, transactions, scheduled, settings } = obj.data
+  const goals = Array.isArray(obj.data.goals) ? obj.data.goals : []
 
-  const imported = { accounts: 0, categories: 0, transactions: 0, scheduled: 0, settings: 0 }
+  const imported = { accounts: 0, categories: 0, transactions: 0, scheduled: 0, settings: 0, goals: 0 }
 
   await db.transaction('rw', TABLES.map((t) => db[t]), async () => {
     if (mode === 'replace') {
@@ -92,11 +97,13 @@ export async function applyBackup(obj, mode) {
       await db.transactions.bulkAdd(transactions)
       await db.scheduled.bulkAdd(scheduled)
       await db.settings.bulkAdd(settings)
+      await db.goals.bulkAdd(goals)
       imported.accounts = accounts.length
       imported.categories = categories.length
       imported.transactions = transactions.length
       imported.scheduled = scheduled.length
       imported.settings = settings.length
+      imported.goals = goals.length
       return
     }
 
@@ -151,6 +158,11 @@ export async function applyBackup(obj, mode) {
     for (const s of scheduled) {
       await db.scheduled.add(remapRefs(stripId(s)))
       imported.scheduled += 1
+    }
+    // Goals carry no account/category refs — insert fresh.
+    for (const g of goals) {
+      await db.goals.add(stripId(g))
+      imported.goals += 1
     }
     // Settings intentionally untouched in merge mode.
   })

@@ -233,9 +233,9 @@ export async function planBlueCoinsImport(parsed, accountDefs = null) {
  * Write parsed rows, creating missing accounts/categories on the fly
  * (default colors/icons — editable later in Settings).
  *
- * @param accountDefs optional Map<lowercased name, {name, type, startingBalance}>
+ * @param accountDefs optional Map<lowercased name, {name, type, usage, startingBalance}>
  *        (from the .fydb parser) so created accounts carry their real
- *        asset/liability type and opening balance instead of defaults.
+ *        asset/liability type, usage and opening balance instead of defaults.
  */
 export async function commitBlueCoinsImport(parsed, accountDefs = null) {
   let accountsCreated = 0
@@ -256,6 +256,7 @@ export async function commitBlueCoinsImport(parsed, accountDefs = null) {
       const id = await db.accounts.add({
         name: label,
         type: def?.type ?? 'asset',
+        usage: def?.usage === 'investment' ? 'investment' : 'active',
         startingBalance: def?.startingBalance ?? 0,
         expectedAnnualReturn: 0,
         createdAt: now,

@@ -12,7 +12,7 @@ const OPS = ['+', '−', '×', '÷']
  * Controlled: `value` is the raw expression string, `onChange(str)` updates it.
  * The parent commits `evaluate(value).value` (see lib/calc.js).
  */
-export default function AmountCalcInput({ value, onChange, autoFocus, id }) {
+export default function AmountCalcInput({ value, onChange, id }) {
   const inputRef = useRef(null)
 
   const expression = isExpression(value)
@@ -38,7 +38,6 @@ export default function AmountCalcInput({ value, onChange, autoFocus, id }) {
           placeholder="0,00"
           aria-label="Amount (supports + − × ÷ calculations)"
           className="w-full bg-transparent py-3 text-3xl font-semibold text-txt-primary placeholder:text-txt-muted focus:outline-none"
-          autoFocus={autoFocus}
         />
         <span className="text-2xl font-semibold text-txt-muted">€</span>
       </div>

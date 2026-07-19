@@ -13,6 +13,7 @@ export {
   deleteTransaction,
   getTransactionsPage,
   searchTransactionsPage,
+  getDescriptionSuggestions,
 } from './transactions'
 export {
   getAccounts,
@@ -20,6 +21,7 @@ export {
   updateAccount,
   deleteAccount,
   countAccountUsage,
+  accountUsage,
 } from './accounts'
 export {
   getCategories,
@@ -45,3 +47,11 @@ export {
   incomeExpenseTotals,
   monthlyReport,
 } from './derive'
+export {
+  getGoals,
+  getActiveGoal,
+  addGoal,
+  updateGoal,
+  deleteGoal,
+  computeGoalProgress,
+} from './goals'

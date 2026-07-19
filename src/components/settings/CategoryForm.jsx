@@ -23,6 +23,7 @@ export default function CategoryForm({ category, defaultKind = 'expense', onSubm
   const [color, setColor] = useState(category?.color ?? COLOR_CHOICES[0])
   const [hexInput, setHexInput] = useState(category?.color ?? COLOR_CHOICES[0])
   const [icon, setIcon] = useState(category?.icon ?? ICON_CHOICES[0])
+  const [excludeFromStats, setExcludeFromStats] = useState(Boolean(category?.excludeFromStats))
   const [error, setError] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [blockedCount, setBlockedCount] = useState(null)
@@ -49,7 +50,7 @@ export default function CategoryForm({ category, defaultKind = 'expense', onSubm
     }
     setBusy(true)
     try {
-      await onSubmit({ name, kind, color, icon })
+      await onSubmit({ name, kind, color, icon, excludeFromStats })
     } finally {
       setBusy(false)
     }
@@ -156,6 +157,34 @@ export default function CategoryForm({ category, defaultKind = 'expense', onSubm
           })}
         </div>
       </div>
+
+      {/* Balance-only flag: adjustments that shouldn't distort stats */}
+      <button
+        type="button"
+        role="switch"
+        aria-checked={excludeFromStats}
+        onClick={() => setExcludeFromStats((v) => !v)}
+        className="flex w-full items-center justify-between rounded-2xl border border-hairline bg-elevated px-4 py-3"
+      >
+        <span className="text-left">
+          <span className="block text-txt-primary">Balance only</span>
+          <span className="block text-xs text-txt-muted">
+            Adjusts the account balance &amp; net worth, but is ignored by cash flow, spending
+            and reports.
+          </span>
+        </span>
+        <span
+          className={`ml-3 flex h-7 w-12 shrink-0 items-center rounded-full p-1 transition-colors ${
+            excludeFromStats ? 'bg-accent' : 'bg-white/10'
+          }`}
+        >
+          <span
+            className={`h-5 w-5 rounded-full bg-white transition-transform ${
+              excludeFromStats ? 'translate-x-5' : ''
+            }`}
+          />
+        </span>
+      </button>
 
       {error && <p className="text-sm text-expense">{error}</p>}
       {blockedCount != null && (

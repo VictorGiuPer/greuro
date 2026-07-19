@@ -414,16 +414,57 @@ async function tour(page) {
 // MP4 conversion — H.264/yuv420p so the file opens anywhere (Windows, phones,
 // social media). Uses the ffmpeg-static devDependency, falling back to PATH.
 // ---------------------------------------------------------------------------
-function tryMp4(webmPath) {
+function ffmpegBin() {
   const staticFfmpeg = path.join(ROOT, 'node_modules', 'ffmpeg-static', 'ffmpeg.exe')
-  const ffmpeg = existsSync(staticFfmpeg) ? staticFfmpeg : 'ffmpeg'
+  return existsSync(staticFfmpeg) ? staticFfmpeg : 'ffmpeg'
+}
+
+function tryMp4(webmPath) {
   const mp4Path = webmPath.replace(/\.webm$/, '.mp4')
   const res = spawnSync(
-    ffmpeg,
+    ffmpegBin(),
     ['-y', '-i', webmPath, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '20', '-movflags', '+faststart', mp4Path],
     { stdio: 'ignore', shell: false },
   )
   return res.status === 0 ? mp4Path : null
+}
+
+/**
+ * Social-feed reframes of the portrait capture.
+ *
+ * The phone capture is ~1:2.16, far taller than any feed wants — posted as-is
+ * it eats the whole viewport and pushes the post's text out of view. So we fit
+ * the untouched recording inside a wider canvas (never cropping the UI) and
+ * fill the sides with the app's OWN background colour, so the bars read as part
+ * of the design rather than as letterboxing.
+ *
+ * 1:1  — squarest, smallest feed footprint, app is smallest.
+ * 4:5  — LinkedIn's tallest "polite" portrait; a bigger app, still leaves the
+ *        caption visible. Good middle ground.
+ */
+const CANVAS_BG = '0x0A0B0F' // --bg, same as the app shell
+const REFRAMES = [
+  { label: 'square', width: 1080, height: 1080 },
+  { label: '4x5', width: 1080, height: 1350 },
+]
+
+function reframe(mp4Path, { label, width, height }) {
+  const out = mp4Path.replace(/\.mp4$/, `-${label}.mp4`)
+  const vf = [
+    // Fit inside the canvas without cropping; lanczos keeps the text crisp.
+    `scale=${width}:${height}:force_original_aspect_ratio=decrease:flags=lanczos`,
+    // Even dims keep yuv420p chroma happy.
+    'scale=trunc(iw/2)*2:trunc(ih/2)*2',
+    `pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=${CANVAS_BG}`,
+    // Square pixels, or players render the canvas slightly off-aspect.
+    'setsar=1',
+  ].join(',')
+  const res = spawnSync(
+    ffmpegBin(),
+    ['-y', '-i', mp4Path, '-vf', vf, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '20', '-movflags', '+faststart', out],
+    { stdio: 'ignore', shell: false },
+  )
+  return res.status === 0 ? out : null
 }
 
 // ---------------------------------------------------------------------------
@@ -483,11 +524,16 @@ async function main() {
     for (const f of readdirSync(OUT_DIR))
       if (f.startsWith('page@') && f.endsWith('.webm')) rmSync(path.join(OUT_DIR, f), { force: true })
     const mp4 = tryMp4(finalWebm)
-    if (mp4) {
-      rmSync(finalWebm, { force: true }) // the mp4 is the shareable deliverable
-      console.log(`\nVideo saved: ${mp4}`)
-    } else {
+    if (!mp4) {
       console.log(`\nMP4 conversion failed — kept ${finalWebm} (plays in any browser).`)
+      return
+    }
+    rmSync(finalWebm, { force: true }) // the mp4s are the shareable deliverables
+    console.log(`\nVideo saved (phone-shaped): ${mp4}`)
+
+    for (const spec of REFRAMES) {
+      const out = reframe(mp4, spec)
+      if (out) console.log(`  ${spec.width}x${spec.height} (${spec.label}): ${out}`)
     }
   } finally {
     server.kill()

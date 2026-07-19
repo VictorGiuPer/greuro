@@ -10,6 +10,9 @@ import {
   incomeExpenseTotals,
   cashFlow,
   accountBalances,
+  accountUsage,
+  getActiveGoal,
+  computeGoalProgress,
 } from '../db'
 import { periodRange, customRange, todayNoon, addDays } from '../lib/dates'
 import { formatDate } from '../lib/format'
@@ -19,9 +22,11 @@ import SpendingFocus from '../components/dashboard/SpendingFocus'
 import NetEarningsCard from '../components/dashboard/NetEarningsCard'
 import CashFlowCard from '../components/dashboard/CashFlowCard'
 import ForecastCard from '../components/dashboard/ForecastCard'
+import SavingsCard from '../components/dashboard/SavingsCard'
 import MonthlyReport from '../components/MonthlyReport'
 import Settings from '../components/settings/Settings'
 import TransactionForm from '../components/TransactionForm'
+import GoalForm from '../components/GoalForm'
 import Fab from '../components/ui/Fab'
 
 /**
@@ -38,6 +43,9 @@ export default function Dashboard() {
   const [reportOpen, setReportOpen] = useState(false)
   const [txFormOpen, setTxFormOpen] = useState(false)
   const [focusOpen, setFocusOpen] = useState(false)
+  const [goalFormOpen, setGoalFormOpen] = useState(false)
+  const [goal, setGoal] = useState(null)
+  const [goalProgress, setGoalProgress] = useState(null)
   const [refreshToken, setRefreshToken] = useState(0)
 
   const [period, setPeriod] = useState({
@@ -60,29 +68,47 @@ export default function Dashboard() {
   )
 
   const reloadMeta = useCallback(async () => {
-    const [accs, cats, sched, sett] = await Promise.all([
+    const [accs, cats, sched, sett, activeGoal] = await Promise.all([
       getAccounts(),
       getCategories(),
       getScheduled(),
       getSettings(),
+      getActiveGoal(),
     ])
     setAccounts(accs)
     setCategories(cats)
     setScheduled(sched)
     setSettingsState(sett)
+    setGoal(activeGoal)
   }, [])
 
   useEffect(() => {
     reloadMeta()
   }, [reloadMeta])
 
-  // The Cash Flow card's account: persisted choice, else the first account.
+  // The main everyday account (a persisted tag) — default for cash flow +
+  // savings; falls back to the first active account.
+  const mainAccountId = useMemo(() => {
+    if (!settings) return null
+    const stored = settings.mainAccountId
+    if (stored != null && accounts.some((a) => a.id === stored)) return stored
+    const firstActive = accounts.find((a) => accountUsage(a) === 'active')
+    return firstActive?.id ?? accounts[0]?.id ?? null
+  }, [settings, accounts])
+
+  // The Cash Flow card's account: explicit choice, else main account.
   const cashFlowAccountId = useMemo(() => {
     if (!settings) return null
     const stored = settings.cashFlowAccountId
     if (stored != null && accounts.some((a) => a.id === stored)) return stored
-    return accounts[0]?.id ?? null
-  }, [settings, accounts])
+    return mainAccountId
+  }, [settings, accounts, mainAccountId])
+
+  // Only investment-tagged accounts feed the growth projection.
+  const investmentAccounts = useMemo(
+    () => accounts.filter((a) => accountUsage(a) === 'investment'),
+    [accounts],
+  )
 
   // Period-dependent derivations.
   useEffect(() => {
@@ -108,6 +134,23 @@ export default function Dashboard() {
     }
   }, [range, cashFlowAccountId, refreshToken])
 
+  // Savings goal progress — recomputed when the goal, main account or any
+  // transaction (refreshToken) changes.
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      if (!goal) {
+        setGoalProgress(null)
+        return
+      }
+      const p = await computeGoalProgress(goal, mainAccountId)
+      if (active) setGoalProgress(p)
+    })()
+    return () => {
+      active = false
+    }
+  }, [goal, mainAccountId, refreshToken])
+
   const categoriesById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories])
 
   async function changeCashFlowAccount(id) {
@@ -123,6 +166,11 @@ export default function Dashboard() {
   function handleTxSaved() {
     setTxFormOpen(false)
     setRefreshToken((n) => n + 1) // re-derive all dashboard numbers
+  }
+
+  async function handleGoalSaved() {
+    setGoalFormOpen(false)
+    await reloadMeta()
   }
 
   const periodLabel =
@@ -179,9 +227,17 @@ export default function Dashboard() {
           />
         </div>
 
+        <SavingsCard
+          goal={goal}
+          progress={goalProgress}
+          onCreate={() => setGoalFormOpen(true)}
+          onEdit={() => setGoalFormOpen(true)}
+          onSetMain={() => setSettingsOpen(true)}
+        />
+
         {settings && (
           <ForecastCard
-            accounts={accounts}
+            accounts={investmentAccounts}
             balances={balances}
             scheduled={scheduled}
             settings={settings}
@@ -209,6 +265,13 @@ export default function Dashboard() {
         categories={categories}
         editingTx={null}
         onMetaChanged={reloadMeta}
+      />
+
+      <GoalForm
+        open={goalFormOpen}
+        onClose={() => setGoalFormOpen(false)}
+        onSaved={handleGoalSaved}
+        editingGoal={goal}
       />
 
       <MonthlyReport

@@ -15,6 +15,7 @@ async function seedFixture() {
   await db.transactions.add({ type: 'transfer', amount: 100, date: noon(2026, 5, 2), description: '', categoryId: null, accountId: null, fromAccountId: checking, toAccountId: savings, createdAt: 1, updatedAt: 1 })
   await db.scheduled.add({ type: 'expense', amount: 10, description: 'Sub', categoryId: food, accountId: checking, fromAccountId: null, toAccountId: null, recurrence: { unit: 'month', interval: 1 }, anchorDay: 5, startDate: noon(2026, 5, 5), nextDueDate: noon(2026, 6, 5), lastPostedDate: null, active: 1, createdAt: 1, updatedAt: 1 })
   await db.settings.put({ key: 'inflationRate', value: 3 })
+  await db.goals.add({ name: 'Trip', targetAmount: 3000, startYear: 2026, startMonth: 0, archived: 0, createdAt: 1, updatedAt: 1 })
   return { checking, savings, food }
 }
 
@@ -29,6 +30,7 @@ describe('backup round-trip', () => {
       transactions: await db.transactions.toArray(),
       scheduled: await db.scheduled.toArray(),
       settings: await db.settings.toArray(),
+      goals: await db.goals.toArray(),
     }
 
     // Serialize exactly like the file on disk.
@@ -38,12 +40,27 @@ describe('backup round-trip', () => {
     await clearAll()
     const imported = await applyBackup(json, 'replace')
     expect(imported.transactions).toBe(2)
+    expect(imported.goals).toBe(1)
 
     expect(await db.accounts.toArray()).toEqual(before.accounts)
     expect(await db.categories.toArray()).toEqual(before.categories)
     expect(await db.transactions.toArray()).toEqual(before.transactions)
     expect(await db.scheduled.toArray()).toEqual(before.scheduled)
     expect(await db.settings.toArray()).toEqual(before.settings)
+    expect(await db.goals.toArray()).toEqual(before.goals)
+  })
+
+  it('imports an older backup with no goals array', async () => {
+    await seedFixture()
+    const json = JSON.parse(JSON.stringify(await buildBackup()))
+    delete json.data.goals // simulate a pre-v3 export
+    expect(validateBackup(json).ok).toBe(true)
+
+    await clearAll()
+    const imported = await applyBackup(json, 'replace')
+    expect(imported.goals).toBe(0)
+    expect(await db.goals.count()).toBe(0)
+    expect(await db.transactions.count()).toBe(2)
   })
 })
 

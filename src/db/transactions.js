@@ -125,3 +125,44 @@ export async function getTransactionsPage({ limit = 30, before = null, filters =
 export async function searchTransactionsPage({ query = '', limit = 30, before = null } = {}) {
   return getTransactionsPage({ limit, before, filters: { query } })
 }
+
+/**
+ * Autofill memory: recent DISTINCT transactions whose description starts with
+ * `prefix` (case-insensitive), newest first. Deduped by lowercased
+ * description, keeping the most recent occurrence — so picking "Aldi"
+ * prefills the last time's type/category/account. The amount is intentionally
+ * NOT part of the suggestion (the form leaves it empty).
+ *
+ * @param {string} prefix   at least 1 char; empty returns []
+ * @param {number} [limit]  max suggestions to return (default 4)
+ * @returns {Promise<Array<{description,type,categoryId,accountId,fromAccountId,toAccountId}>>}
+ */
+export async function getDescriptionSuggestions(prefix, limit = 4) {
+  const p = (prefix ?? '').trim().toLowerCase()
+  if (!p) return []
+
+  // Scan the most recent window newest-first (phone-scale data); dedupe by
+  // lowercased description keeping the first (most recent) hit.
+  const MAX_SCAN = 500
+  const recent = await db.transactions.orderBy('[date+id]').reverse().limit(MAX_SCAN).toArray()
+
+  const seen = new Set()
+  const out = []
+  for (const t of recent) {
+    const desc = (t.description || '').trim()
+    if (!desc) continue
+    const key = desc.toLowerCase()
+    if (!key.startsWith(p) || seen.has(key)) continue
+    seen.add(key)
+    out.push({
+      description: desc,
+      type: t.type,
+      categoryId: t.categoryId ?? null,
+      accountId: t.accountId ?? null,
+      fromAccountId: t.fromAccountId ?? null,
+      toAccountId: t.toAccountId ?? null,
+    })
+    if (out.length >= limit) break
+  }
+  return out
+}
