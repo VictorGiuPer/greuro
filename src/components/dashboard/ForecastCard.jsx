@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { ChevronDown } from 'lucide-react'
 import {
   ComposedChart,
   Area,
@@ -9,15 +10,18 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts'
-import { projectBands, investmentTargetId } from '../../lib/forecast'
+import { projectBands, referencePoints, investmentTargetId } from '../../lib/forecast'
 import { formatAmount, parseAmountInput, toAmountInputValue } from '../../lib/format'
 
-const HORIZONS = [1, 5, 10, 20]
+const HORIZONS = [5, 10, 20]
 
 const compactEuro = (v) =>
   Math.abs(v) >= 1000
     ? `${(v / 1000).toLocaleString('de-DE', { maximumFractionDigits: 0 })}k`
     : Math.round(v).toLocaleString('de-DE')
+
+// Whole-euro amount for the reference readout (no cents, with € suffix).
+const wholeEuro = (v) => `${Math.round(v).toLocaleString('de-DE')} €`
 
 function BandTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null
@@ -27,7 +31,7 @@ function BandTooltip({ active, payload, label }) {
       <div className="mb-1 font-medium text-txt-secondary">
         {new Date(label).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}
       </div>
-      <div className="tabular-nums text-txt-primary">Base: {formatAmount(point.base)}</div>
+      <div className="tabular-nums text-txt-primary">Expected: {formatAmount(point.base)}</div>
       <div className="tabular-nums text-txt-muted">
         {formatAmount(point.pess)} – {formatAmount(point.opt)}
       </div>
@@ -36,14 +40,19 @@ function BandTooltip({ active, payload, label }) {
 }
 
 /**
- * Forward net-worth projection card: base line + shaded pessimistic–optimistic
- * band, horizon selector, inflation toggle. Assumptions, not predictions.
+ * Investment growth projection: each investment account compounds at its own
+ * expected return; the "keep investing" amount flows into a chosen account.
+ * Best/worst bands = every rate ± the settings spread. Assumptions, not
+ * predictions. Five reference values below the chart make each year explicit.
  */
-export default function ForecastCard({ accounts, balances, scheduled, settings, onSettingChange }) {
-  const horizon = settings.forecastHorizonYears
+export default function ForecastCard({ accounts, balances, settings, onSettingChange }) {
+  const horizon = HORIZONS.includes(settings.forecastHorizonYears)
+    ? settings.forecastHorizonYears
+    : 5
   const adjust = settings.inflationAdjust
+  const spread = Number(settings.forecastBandSpread) || 0
 
-  // "Standard investment" — draft string; committed on blur/Enter.
+  // "Keep investing" — draft string; committed on blur/Enter.
   const [investDraft, setInvestDraft] = useState(toAmountInputValue(settings.monthlyInvestment))
   useEffect(() => {
     setInvestDraft(toAmountInputValue(settings.monthlyInvestment))
@@ -56,22 +65,20 @@ export default function ForecastCard({ accounts, balances, scheduled, settings, 
     setInvestDraft(toAmountInputValue(value))
   }
 
-  const investTargetName = useMemo(() => {
-    if (!(Number(settings.monthlyInvestment) > 0) || accounts.length === 0) return null
-    const id = investmentTargetId(accounts)
-    return accounts.find((a) => a.id === id)?.name ?? null
-  }, [accounts, settings.monthlyInvestment])
+  // Which account the monthly contribution flows into (default = best rate).
+  const targetId = useMemo(() => {
+    const stored = settings.investmentTargetAccountId
+    if (stored != null && accounts.some((a) => a.id === stored)) return stored
+    return investmentTargetId(accounts)
+  }, [accounts, settings.investmentTargetAccountId])
 
   const data = useMemo(() => {
     if (!accounts.length || !balances) return []
-    return projectBands({
-      accounts,
-      startBalances: balances,
-      scheduled,
-      horizonYears: horizon,
-      settings,
-    })
-  }, [accounts, balances, scheduled, horizon, settings])
+    return projectBands({ accounts, startBalances: balances, horizonYears: horizon, settings })
+  }, [accounts, balances, horizon, settings])
+
+  const refs = useMemo(() => referencePoints(data, horizon), [data, horizon])
+  const anyReturn = accounts.some((a) => (Number(a.expectedAnnualReturn) || 0) > 0)
 
   const yearTick = (ts) => `'${String(new Date(ts).getFullYear()).slice(2)}`
 
@@ -91,7 +98,7 @@ export default function ForecastCard({ accounts, balances, scheduled, settings, 
               type="button"
               onClick={() => onSettingChange('forecastHorizonYears', h)}
               aria-pressed={h === horizon}
-              className={`min-w-[38px] rounded-full px-2 py-1 text-xs font-semibold transition-colors ${
+              className={`min-w-[40px] rounded-full px-2 py-1 text-xs font-semibold transition-colors ${
                 h === horizon ? 'bg-accent text-black' : 'text-txt-secondary'
               }`}
             >
@@ -107,7 +114,7 @@ export default function ForecastCard({ accounts, balances, scheduled, settings, 
         </p>
       ) : (
         <>
-          <div className="h-[190px]">
+          <div className="h-[180px]">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={data} margin={{ top: 8, right: 4, bottom: 0, left: 4 }}>
                 <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
@@ -147,12 +154,24 @@ export default function ForecastCard({ accounts, balances, scheduled, settings, 
             </ResponsiveContainer>
           </div>
 
-          {/* Standard investment: keep investing X €/month */}
-          <div className="mt-2 flex items-center justify-between gap-3 rounded-xl border border-hairline bg-elevated px-3 py-2">
-            <label htmlFor="forecast-invest" className="text-sm text-txt-secondary">
+          {/* Reference readout — the exact projected value at 5 even steps. */}
+          <div className="mt-2 grid grid-cols-5 gap-1 rounded-xl border border-hairline bg-elevated p-2">
+            {refs.map((r) => (
+              <div key={r.year} className="text-center">
+                <div className="text-[10px] text-txt-muted">Yr {r.year}</div>
+                <div className="text-[11px] font-semibold tabular-nums text-txt-primary">
+                  {wholeEuro(r.value)}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Keep investing X €/month into a chosen account */}
+          <div className="mt-2 flex items-center justify-between gap-2 rounded-xl border border-hairline bg-elevated px-3 py-2">
+            <label htmlFor="forecast-invest" className="shrink-0 text-sm text-txt-secondary">
               Keep investing
             </label>
-            <span className="flex items-center gap-1">
+            <div className="flex items-center gap-1">
               <input
                 id="forecast-invest"
                 type="text"
@@ -162,15 +181,36 @@ export default function ForecastCard({ accounts, balances, scheduled, settings, 
                 onChange={(e) => setInvestDraft(e.target.value)}
                 onBlur={commitInvest}
                 onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-                className="w-20 rounded-lg bg-white/5 px-2 py-1 text-right text-sm font-semibold tabular-nums text-accent focus:outline-none focus:ring-1 focus:ring-accent/50"
+                className="w-16 rounded-lg bg-white/5 px-2 py-1 text-right text-sm font-semibold tabular-nums text-accent focus:outline-none focus:ring-1 focus:ring-accent/50"
               />
               <span className="text-sm text-txt-muted">€/mo</span>
-            </span>
+            </div>
           </div>
-          {investTargetName && (
-            <p className="mt-1 px-1 text-[11px] text-txt-muted">
-              Contributions compound in {investTargetName}.
-            </p>
+
+          {/* Which account the contribution flows into */}
+          {settings.monthlyInvestment > 0 && accounts.length > 0 && (
+            <div className="relative mt-2">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-txt-muted">
+                Invest into
+              </span>
+              <select
+                value={targetId ?? ''}
+                onChange={(e) => onSettingChange('investmentTargetAccountId', Number(e.target.value))}
+                aria-label="Account the monthly investment flows into"
+                className="w-full appearance-none truncate rounded-xl border border-hairline bg-elevated py-2 pl-24 pr-7 text-right text-xs font-medium text-txt-primary focus:outline-none focus:ring-1 focus:ring-accent/50"
+              >
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name} ({a.expectedAnnualReturn || 0}%)
+                  </option>
+                ))}
+              </select>
+              <ChevronDown
+                size={13}
+                className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-txt-muted"
+                aria-hidden="true"
+              />
+            </div>
           )}
 
           {/* Legend + inflation toggle */}
@@ -178,11 +218,11 @@ export default function ForecastCard({ accounts, balances, scheduled, settings, 
             <div className="flex items-center gap-3 text-xs text-txt-muted">
               <span className="flex items-center gap-1.5">
                 <span className="h-0.5 w-4 rounded bg-accent" aria-hidden="true" />
-                Base
+                Expected
               </span>
               <span className="flex items-center gap-1.5">
                 <span className="h-2.5 w-4 rounded bg-accent/20" aria-hidden="true" />
-                Pessimistic–optimistic
+                ±{spread}%
               </span>
             </div>
             <button
@@ -200,11 +240,17 @@ export default function ForecastCard({ accounts, balances, scheduled, settings, 
             </button>
           </div>
 
+          {!anyReturn && (
+            <p className="mt-2 rounded-lg bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-300">
+              Set an expected return on your investment accounts (Settings) so this grows.
+            </p>
+          )}
+
           <p className="mt-2 text-[11px] leading-snug text-txt-muted">
-            Illustrative projection from your return assumptions ({settings.returnPess}/
-            {settings.returnBase}/{settings.returnOpt} %{adjust ? `, ${settings.inflationRate} % inflation` : ''}
-            ), recurring transactions and the monthly investment above. Not a prediction or
-            financial advice.
+            Illustrative: each investment account compounds at its own expected return, ±{spread}
+            {' '}pts for the band, plus the monthly amount above
+            {adjust ? `, in today's euros (${settings.inflationRate}% inflation)` : ''}. Not a
+            prediction or financial advice.
           </p>
         </>
       )}

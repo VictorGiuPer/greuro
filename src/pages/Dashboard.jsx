@@ -247,7 +247,6 @@ export default function Dashboard() {
           <ForecastCard
             accounts={investmentAccounts}
             balances={balances}
-            scheduled={scheduled}
             settings={settings}
             onSettingChange={changeForecastSetting}
           />

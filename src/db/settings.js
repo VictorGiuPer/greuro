@@ -6,18 +6,17 @@ import { db } from './db'
  */
 
 export const SETTINGS_DEFAULTS = {
-  // Forecast scenario annual return assumptions (%). The per-account
-  // expectedAnnualReturn is scaled by pess/base and opt/base for the bands.
-  returnPess: 5,
-  returnBase: 7,
-  returnOpt: 9,
+  // Investment forecast: each account grows at its own expectedAnnualReturn;
+  // best/worst bands shift every rate by ± this many percentage points.
+  forecastBandSpread: 2,
   // Inflation (% p.a.) + whether the forecast defaults to real values.
   inflationRate: 2,
   inflationAdjust: false,
-  forecastHorizonYears: 10,
-  // "Standard investment": €/month assumed to keep flowing into the
-  // highest-return account in the forecast (shows compound growth).
+  forecastHorizonYears: 5,
+  // "Keep investing": €/month contributed into `investmentTargetAccountId`
+  // (default = highest-return investment account).
   monthlyInvestment: 0,
+  investmentTargetAccountId: null,
   // Reminders "Due Soon" badge thresholds (days).
   dueSoonAmberDays: 3,
   dueSoonTealDays: 7,

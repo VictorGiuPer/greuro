@@ -65,9 +65,7 @@ export default function Settings({ open, onClose, accounts, categories, onChange
       setLastBackupAt(s.lastBackupAt)
       setMainAccountId(s.mainAccountId)
       setPrefs({
-        returnPess: toAmountInputValue(s.returnPess),
-        returnBase: toAmountInputValue(s.returnBase),
-        returnOpt: toAmountInputValue(s.returnOpt),
+        forecastBandSpread: toAmountInputValue(s.forecastBandSpread),
         inflationRate: toAmountInputValue(s.inflationRate),
         dueSoonAmberDays: String(s.dueSoonAmberDays),
         dueSoonTealDays: String(s.dueSoonTealDays),
@@ -85,9 +83,7 @@ export default function Settings({ open, onClose, accounts, categories, onChange
       return Number.isInteger(n) && n >= 0 ? n : fallback
     }
     await setSettings({
-      returnPess: num(prefs.returnPess, 5),
-      returnBase: num(prefs.returnBase, 7),
-      returnOpt: num(prefs.returnOpt, 9),
+      forecastBandSpread: num(prefs.forecastBandSpread, 2),
       inflationRate: num(prefs.inflationRate, 2),
       dueSoonAmberDays: days(prefs.dueSoonAmberDays, 3),
       dueSoonTealDays: days(prefs.dueSoonTealDays, 7),
@@ -287,31 +283,24 @@ export default function Settings({ open, onClose, accounts, categories, onChange
                 <h2 className="mb-3 text-base font-semibold text-txt-primary">Preferences</h2>
                 <div className="rounded-card border border-hairline bg-card p-4">
                   <h3 className="mb-2 text-sm font-medium text-txt-secondary">
-                    Forecast return assumptions (% p.a.)
+                    Investment forecast
                   </h3>
-                  <div className="mb-4 grid grid-cols-3 gap-3">
+                  <div className="mb-4 grid grid-cols-2 gap-3">
                     <PrefField
-                      label="Pessimistic"
-                      value={prefs.returnPess}
-                      onChange={(v) => setPrefs((p) => ({ ...p, returnPess: v }))}
+                      label="Best/worst spread ± %"
+                      value={prefs.forecastBandSpread}
+                      onChange={(v) => setPrefs((p) => ({ ...p, forecastBandSpread: v }))}
                     />
-                    <PrefField
-                      label="Base"
-                      value={prefs.returnBase}
-                      onChange={(v) => setPrefs((p) => ({ ...p, returnBase: v }))}
-                    />
-                    <PrefField
-                      label="Optimistic"
-                      value={prefs.returnOpt}
-                      onChange={(v) => setPrefs((p) => ({ ...p, returnOpt: v }))}
-                    />
-                  </div>
-                  <div className="mb-4 grid grid-cols-3 gap-3">
                     <PrefField
                       label="Inflation %"
                       value={prefs.inflationRate}
                       onChange={(v) => setPrefs((p) => ({ ...p, inflationRate: v }))}
                     />
+                  </div>
+                  <h3 className="mb-2 text-sm font-medium text-txt-secondary">
+                    Reminders “Due soon”
+                  </h3>
+                  <div className="mb-4 grid grid-cols-2 gap-3">
                     <PrefField
                       label="Amber ≤ days"
                       value={prefs.dueSoonAmberDays}
@@ -333,8 +322,9 @@ export default function Settings({ open, onClose, accounts, categories, onChange
                     {prefsNote && <span className="text-sm text-accent">{prefsNote}</span>}
                   </div>
                   <p className="mt-3 text-xs leading-snug text-txt-muted">
-                    Returns scale the forecast bands; the badge thresholds control when reminders
-                    show amber/teal "Due soon".
+                    Each investment account grows at its own expected return (set on the account);
+                    the spread sets the best/worst band. Thresholds control the amber/teal “Due
+                    soon” reminder badges.
                   </p>
                 </div>
               </section>
