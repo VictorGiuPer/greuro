@@ -52,6 +52,7 @@ export {
   getActiveGoal,
   addGoal,
   updateGoal,
+  addToGoalSaved,
   deleteGoal,
   computeGoalProgress,
 } from './goals'

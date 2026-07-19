@@ -11,9 +11,10 @@ import useCountUp from '../../lib/useCountUp'
  * @param progress  computeGoalProgress() result or null
  * @param onCreate  () => void   open the goal form to create one
  * @param onEdit    () => void   open the goal form to edit the active goal
+ * @param onAdd     () => void   open the quick add-to-savings sheet
  * @param onSetMain () => void   open Settings to choose a main account
  */
-export default function SavingsCard({ goal, progress, onCreate, onEdit, onSetMain }) {
+export default function SavingsCard({ goal, progress, onCreate, onEdit, onAdd, onSetMain }) {
   const saved = useCountUp(progress?.saved ?? 0)
 
   // No goal yet → invite to create one.
@@ -42,6 +43,7 @@ export default function SavingsCard({ goal, progress, onCreate, onEdit, onSetMai
   const pct = progress?.pct ?? 0
   const done = progress?.done
   const cur = progress?.currentMonthNet ?? 0
+  const manual = progress?.manualAdjustment ?? 0
 
   return (
     <section className="rounded-card border border-hairline bg-card p-4">
@@ -50,12 +52,22 @@ export default function SavingsCard({ goal, progress, onCreate, onEdit, onSetMai
           <Target size={16} className={done ? 'text-accent' : 'text-txt-muted'} aria-hidden="true" />
           <h2 className="truncate text-sm font-medium text-txt-secondary">{goal.name}</h2>
         </div>
-        <button
-          onClick={onEdit}
-          className="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium text-txt-muted hover:text-txt-primary"
-        >
-          Edit
-        </button>
+        <div className="flex shrink-0 items-center gap-1">
+          {!noMain && (
+            <button
+              onClick={onAdd}
+              className="rounded-full bg-accent/15 px-2.5 py-0.5 text-xs font-semibold text-accent hover:bg-accent/25"
+            >
+              + Add
+            </button>
+          )}
+          <button
+            onClick={onEdit}
+            className="rounded-full px-2 py-0.5 text-xs font-medium text-txt-muted hover:text-txt-primary"
+          >
+            Edit
+          </button>
+        </div>
       </div>
 
       {!progress ? (
@@ -100,6 +112,12 @@ export default function SavingsCard({ goal, progress, onCreate, onEdit, onSetMai
               {formatAmount(cur)} <span className="opacity-60">(pending)</span>
             </span>
           </div>
+          {manual !== 0 && (
+            <p className="mt-1 text-[11px] text-txt-muted">
+              incl. {manual < 0 ? '−' : ''}
+              {formatAmount(manual)} added manually
+            </p>
+          )}
         </>
       )}
     </section>

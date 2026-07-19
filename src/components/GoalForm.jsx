@@ -23,6 +23,7 @@ export default function GoalForm({ open, onClose, onSaved, editingGoal }) {
   const [name, setName] = useState('')
   const [target, setTarget] = useState('')
   const [startMonth, setStartMonth] = useState(currentMonthValue())
+  const [manual, setManual] = useState('')
   const [archived, setArchived] = useState(false)
   const [error, setError] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -36,11 +37,13 @@ export default function GoalForm({ open, onClose, onSaved, editingGoal }) {
       setName(editingGoal.name || '')
       setTarget(toAmountInputValue(editingGoal.targetAmount))
       setStartMonth(monthInputValue(editingGoal.startYear, editingGoal.startMonth))
+      setManual(editingGoal.manualAdjustment ? toAmountInputValue(editingGoal.manualAdjustment) : '')
       setArchived(Boolean(editingGoal.archived))
     } else {
       setName('')
       setTarget('')
       setStartMonth(currentMonthValue())
+      setManual('')
       setArchived(false)
     }
   }, [open, editingGoal])
@@ -52,12 +55,17 @@ export default function GoalForm({ open, onClose, onSaved, editingGoal }) {
     const [y, m] = startMonth.split('-').map(Number)
     if (!y || !m) return setError('Pick a start month.')
 
+    // Manual amount is optional; blank = 0. Negative is allowed (to correct).
+    const manualParsed = manual.trim() ? parseAmountInput(manual) : 0
+    if (!Number.isFinite(manualParsed)) return setError('Enter a valid amount already saved.')
+
     setBusy(true)
     const payload = {
       name,
       targetAmount: amount,
       startYear: y,
       startMonth: m - 1,
+      manualAdjustment: manualParsed,
       archived: archived ? 1 : 0,
     }
     try {
@@ -145,6 +153,29 @@ export default function GoalForm({ open, onClose, onSaved, editingGoal }) {
         <p className="mt-1.5 text-xs text-txt-muted">
           Each completed month, whatever you didn’t spend or invest from your main account is
           added to this goal.
+        </p>
+      </div>
+
+      <div className="mb-4">
+        <label htmlFor="goal-manual" className="mb-1.5 block text-sm text-txt-secondary">
+          Amount already saved
+        </label>
+        <div className="flex items-center rounded-2xl border border-hairline bg-elevated px-4">
+          <input
+            id="goal-manual"
+            type="text"
+            inputMode="decimal"
+            autoComplete="off"
+            value={manual}
+            onChange={(e) => setManual(e.target.value)}
+            placeholder="0,00"
+            className="w-full bg-transparent py-3 text-txt-primary placeholder:text-txt-muted focus:outline-none"
+          />
+          <span className="text-lg text-txt-muted">€</span>
+        </div>
+        <p className="mt-1.5 text-xs text-txt-muted">
+          A starting amount you’ve already put aside. Added on top of the automatic monthly
+          accumulation — you can also top it up anytime from the card.
         </p>
       </div>
 

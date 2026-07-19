@@ -19,6 +19,13 @@ export default function CashFlowCard({ accounts, accountId, onAccountChange, flo
         {negative ? '-' : ''}
         {formatAmount(net)}
       </div>
+      {/* In/out breakdown so a negative net is self-explanatory (outflow
+          includes transfers to investments — that's expected, not a bug). */}
+      {flow && (
+        <div className="mt-0.5 text-[11px] tabular-nums text-txt-muted">
+          in {formatAmount(flow.inflow)} · out {formatAmount(flow.outflow)}
+        </div>
+      )}
       {/* Account picker sits below the number now, with room to read in full. */}
       <div className="relative mt-1.5">
         <select

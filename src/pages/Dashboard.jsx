@@ -27,6 +27,7 @@ import MonthlyReport from '../components/MonthlyReport'
 import Settings from '../components/settings/Settings'
 import TransactionForm from '../components/TransactionForm'
 import GoalForm from '../components/GoalForm'
+import AddSavingsSheet from '../components/AddSavingsSheet'
 import Fab from '../components/ui/Fab'
 
 /**
@@ -44,6 +45,7 @@ export default function Dashboard() {
   const [txFormOpen, setTxFormOpen] = useState(false)
   const [focusOpen, setFocusOpen] = useState(false)
   const [goalFormOpen, setGoalFormOpen] = useState(false)
+  const [addSavingsOpen, setAddSavingsOpen] = useState(false)
   const [goal, setGoal] = useState(null)
   const [goalProgress, setGoalProgress] = useState(null)
   const [refreshToken, setRefreshToken] = useState(0)
@@ -173,6 +175,11 @@ export default function Dashboard() {
     await reloadMeta()
   }
 
+  async function handleSavingsAdjusted() {
+    setAddSavingsOpen(false)
+    await reloadMeta()
+  }
+
   const periodLabel =
     period.kind === 'custom'
       ? `${formatDate(range.from)} – ${formatDate(range.to)}`
@@ -232,6 +239,7 @@ export default function Dashboard() {
           progress={goalProgress}
           onCreate={() => setGoalFormOpen(true)}
           onEdit={() => setGoalFormOpen(true)}
+          onAdd={() => setAddSavingsOpen(true)}
           onSetMain={() => setSettingsOpen(true)}
         />
 
@@ -272,6 +280,13 @@ export default function Dashboard() {
         onClose={() => setGoalFormOpen(false)}
         onSaved={handleGoalSaved}
         editingGoal={goal}
+      />
+
+      <AddSavingsSheet
+        open={addSavingsOpen}
+        onClose={() => setAddSavingsOpen(false)}
+        onSaved={handleSavingsAdjusted}
+        goal={goal}
       />
 
       <MonthlyReport

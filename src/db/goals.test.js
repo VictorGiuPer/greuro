@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { db } from './db'
-import { addGoal, getActiveGoal, updateGoal, computeGoalProgress } from './goals'
+import { addGoal, getActiveGoal, updateGoal, addToGoalSaved, computeGoalProgress } from './goals'
 import { noon } from '../lib/dates'
 
 let main, other, food, salary, adjust
@@ -98,11 +98,54 @@ describe('computeGoalProgress', () => {
     expect(p.pct).toBe(100)
   })
 
-  it('no main account → noMain flag, nothing saved', async () => {
+  it('no main account → noMain flag, nothing accumulated (manual still counts)', async () => {
     const id = await addGoal({ name: 'NoMain', targetAmount: 500, startYear: 2026, startMonth: 0 })
     const p = await computeGoalProgress(await db.goals.get(id), null, NOW)
     expect(p.noMain).toBe(true)
     expect(p.saved).toBe(0)
+    // A manual amount is still reflected even without a main account.
+    await updateGoal(id, { manualAdjustment: 250 })
+    const p2 = await computeGoalProgress(await db.goals.get(id), null, NOW)
+    expect(p2.saved).toBe(250)
+  })
+})
+
+describe('manual savings contributions', () => {
+  it('manual amount layers on top of the automatic accumulation', async () => {
+    // Jan +1000 auto.
+    await tx({ type: 'income', amount: 1000, date: noon(2026, 0, 5), categoryId: salary, accountId: main })
+    const id = await addGoal({ name: 'Trip', targetAmount: 5000, startYear: 2026, startMonth: 0, manualAdjustment: 1000 })
+    const p = await computeGoalProgress(await db.goals.get(id), main, NOW)
+    expect(p.accumulated).toBe(1000)
+    expect(p.manualAdjustment).toBe(1000)
+    expect(p.saved).toBe(2000) // 1000 auto + 1000 manual
+  })
+
+  it('addToGoalSaved increments the manual total cumulatively', async () => {
+    const id = await addGoal({ name: 'Camera', targetAmount: 2000, startYear: 2026, startMonth: 3 }) // starts current month → no auto
+    await addToGoalSaved(id, 1000)
+    await addToGoalSaved(id, 300) // a later gift
+    const p = await computeGoalProgress(await db.goals.get(id), main, NOW)
+    expect(p.manualAdjustment).toBe(1300)
+    expect(p.saved).toBe(1300)
+    expect(p.pct).toBe(65)
+  })
+
+  it('a negative manual adjustment reduces saved, floored at 0 overall', async () => {
+    await tx({ type: 'income', amount: 500, date: noon(2026, 0, 5), categoryId: salary, accountId: main }) // Jan +500 auto
+    const id = await addGoal({ name: 'Y', targetAmount: 1000, startYear: 2026, startMonth: 0 })
+    await addToGoalSaved(id, -900) // remove more than accumulated
+    const p = await computeGoalProgress(await db.goals.get(id), main, NOW)
+    expect(p.accumulated).toBe(500)
+    expect(p.manualAdjustment).toBe(-900)
+    expect(p.saved).toBe(0) // max(0, 500 - 900)
+  })
+
+  it('manual amount alone reaches the goal (done)', async () => {
+    const id = await addGoal({ name: 'Gift', targetAmount: 1000, startYear: 2026, startMonth: 3, manualAdjustment: 1000 })
+    const p = await computeGoalProgress(await db.goals.get(id), main, NOW)
+    expect(p.done).toBe(true)
+    expect(p.saved).toBe(1000)
   })
 })
 

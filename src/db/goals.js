@@ -10,6 +10,10 @@ import { monthRange } from '../lib/dates'
  * investments; balance-only categories already excluded). Negative months
  * subtract, and the running total is floored at 0 (you can't bank less than
  * nothing). The current, partial month is reported separately as "so far".
+ *
+ * `manualAdjustment` is a signed running total the user controls directly
+ * (e.g. "I already had 1.000 € set aside", "add a 300 € gift"). It layers on
+ * top of the automatic accumulation: saved = clamp0(accumulated + manual).
  */
 
 /** All goals, newest first. */
@@ -30,6 +34,7 @@ export async function addGoal(data) {
     targetAmount: Number(data.targetAmount) || 0,
     startYear: Number(data.startYear),
     startMonth: Number(data.startMonth), // 0-based month index
+    manualAdjustment: Number(data.manualAdjustment) || 0,
     archived: data.archived ? 1 : 0,
     createdAt: now,
     updatedAt: now,
@@ -42,8 +47,17 @@ export async function updateGoal(id, patch) {
   if (patch.targetAmount != null) clean.targetAmount = Number(patch.targetAmount) || 0
   if (patch.startYear != null) clean.startYear = Number(patch.startYear)
   if (patch.startMonth != null) clean.startMonth = Number(patch.startMonth)
+  if (patch.manualAdjustment != null) clean.manualAdjustment = Number(patch.manualAdjustment) || 0
   if (patch.archived != null) clean.archived = patch.archived ? 1 : 0
   return db.goals.update(id, clean)
+}
+
+/** Add `delta` € to the goal's manual savings total (negative to remove). */
+export async function addToGoalSaved(id, delta) {
+  const g = await db.goals.get(id)
+  if (!g) return
+  const next = (Number(g.manualAdjustment) || 0) + (Number(delta) || 0)
+  return db.goals.update(id, { manualAdjustment: next, updatedAt: Date.now() })
 }
 
 export async function deleteGoal(id) {
@@ -55,14 +69,20 @@ export async function deleteGoal(id) {
  * @param goal          the goal row
  * @param mainAccountId account whose surplus feeds the goal (null → nothing)
  * @param nowMs         "now" (injectable for tests)
- * @returns {{ saved, target, remaining, pct, monthsElapsed, currentMonthNet, done, noMain }}
+ * @returns {{ saved, accumulated, manualAdjustment, target, remaining, pct, monthsElapsed, currentMonthNet, done, noMain }}
  */
 export async function computeGoalProgress(goal, mainAccountId, nowMs = Date.now()) {
   const target = Number(goal?.targetAmount) || 0
+  const manualAdjustment = Number(goal?.manualAdjustment) || 0
   if (mainAccountId == null) {
+    // No main account → no auto-accumulation, but manual savings still count.
+    const saved = Math.max(0, manualAdjustment)
     return {
-      saved: 0, target, remaining: target, pct: 0,
-      monthsElapsed: 0, currentMonthNet: 0, done: false, noMain: true,
+      saved, accumulated: 0, manualAdjustment, target,
+      remaining: Math.max(0, target - saved),
+      pct: target > 0 ? Math.min(100, Math.round((saved / target) * 100)) : 0,
+      monthsElapsed: 0, currentMonthNet: 0,
+      done: target > 0 && saved >= target, noMain: true,
     }
   }
 
@@ -72,14 +92,14 @@ export async function computeGoalProgress(goal, mainAccountId, nowMs = Date.now(
 
   let y = goal.startYear
   let m = goal.startMonth
-  let saved = 0
+  let accumulated = 0
   let monthsElapsed = 0
   let guard = 0
   // Completed calendar months: start (inclusive) up to current (exclusive).
   while ((y < curY || (y === curY && m < curM)) && guard < 1200) {
     const range = monthRange(y, m)
     const { net } = await cashFlow({ accountId: mainAccountId, from: range.from, to: range.to })
-    saved = Math.max(0, saved + net)
+    accumulated = Math.max(0, accumulated + net)
     monthsElapsed += 1
     m += 1
     if (m > 11) {
@@ -88,6 +108,9 @@ export async function computeGoalProgress(goal, mainAccountId, nowMs = Date.now(
     }
     guard += 1
   }
+
+  // Manual contributions layer on top of the automatic accumulation.
+  const saved = Math.max(0, accumulated + manualAdjustment)
 
   // Current partial month — shown as "this month so far", not yet banked.
   const curRange = monthRange(curY, curM)
@@ -99,6 +122,8 @@ export async function computeGoalProgress(goal, mainAccountId, nowMs = Date.now(
 
   return {
     saved,
+    accumulated,
+    manualAdjustment,
     target,
     remaining: Math.max(0, target - saved),
     pct: target > 0 ? Math.min(100, Math.round((saved / target) * 100)) : 0,
