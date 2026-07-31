@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Search, SlidersHorizontal, Settings as SettingsIcon, X, Download } from 'lucide-react'
-import { getAccounts, getCategories, getTransactionsPage } from '../db'
+import { getAccounts, getCategories, getActiveTrips, getTransactionsPage } from '../db'
 import { exportTransactionRows } from '../lib/exportXlsx'
 import { formatDate } from '../lib/format'
 import TransactionList from '../components/TransactionList'
@@ -12,6 +12,7 @@ import Settings from '../components/settings/Settings'
 export default function Transactions() {
   const [accounts, setAccounts] = useState([])
   const [categories, setCategories] = useState([])
+  const [trips, setTrips] = useState([])
   const [ready, setReady] = useState(false)
 
   const [rawQuery, setRawQuery] = useState('')
@@ -27,19 +28,21 @@ export default function Transactions() {
   // Re-fetch accounts + categories from Dexie. Called after Settings edits and
   // in-form quick-creates so every dropdown / row reflects the latest data.
   const reloadMeta = useCallback(async () => {
-    const [accs, cats] = await Promise.all([getAccounts(), getCategories()])
+    const [accs, cats, tps] = await Promise.all([getAccounts(), getCategories(), getActiveTrips()])
     setAccounts(accs)
     setCategories(cats)
+    setTrips(tps)
   }, [])
 
   // Load reference data once.
   useEffect(() => {
     let active = true
     ;(async () => {
-      const [accs, cats] = await Promise.all([getAccounts(), getCategories()])
+      const [accs, cats, tps] = await Promise.all([getAccounts(), getCategories(), getActiveTrips()])
       if (!active) return
       setAccounts(accs)
       setCategories(cats)
+      setTrips(tps)
       setReady(true)
     })()
     return () => {
@@ -60,6 +63,7 @@ export default function Transactions() {
     [categories],
   )
   const accountsById = useMemo(() => new Map(accounts.map((a) => [a.id, a])), [accounts])
+  const tripsById = useMemo(() => new Map(trips.map((t) => [t.id, t])), [trips])
 
   function openAdd() {
     setEditingTx(null)
@@ -123,6 +127,14 @@ export default function Transactions() {
           setFilters((f) => ({ ...f, accountIds: f.accountIds.filter((x) => x !== id) })),
       })
     }
+    for (const id of filters.tripIds ?? []) {
+      chips.push({
+        key: `trip-${id}`,
+        label: tripsById.get(id)?.name ?? 'Trip',
+        remove: () =>
+          setFilters((f) => ({ ...f, tripIds: (f.tripIds ?? []).filter((x) => x !== id) })),
+      })
+    }
     if (filters.dateFrom != null || filters.dateTo != null) {
       const from = filters.dateFrom != null ? formatDate(filters.dateFrom) : '…'
       const to = filters.dateTo != null ? formatDate(filters.dateTo) : '…'
@@ -133,7 +145,7 @@ export default function Transactions() {
       })
     }
     return chips
-  }, [filters, categoriesById, accountsById])
+  }, [filters, categoriesById, accountsById, tripsById])
 
   return (
     <div className="relative min-h-dvh pb-24">
@@ -236,6 +248,7 @@ export default function Transactions() {
         onSaved={handleSaved}
         accounts={accounts}
         categories={categories}
+        trips={trips}
         editingTx={editingTx}
         onMetaChanged={reloadMeta}
       />
@@ -245,6 +258,7 @@ export default function Transactions() {
         onClose={() => setFilterOpen(false)}
         categories={categories}
         accounts={accounts}
+        trips={trips}
         filters={filters}
         onApply={setFilters}
       />

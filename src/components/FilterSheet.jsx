@@ -9,6 +9,7 @@ export const EMPTY_FILTERS = {
   types: [],
   categoryIds: [],
   accountIds: [],
+  tripIds: [],
   dateFrom: null,
   dateTo: null,
 }
@@ -19,6 +20,7 @@ export function countActiveFilters(f) {
   if (f.types.length) n += 1
   if (f.categoryIds.length) n += 1
   if (f.accountIds.length) n += 1
+  if (f.tripIds?.length) n += 1
   if (f.dateFrom != null || f.dateTo != null) n += 1
   return n
 }
@@ -37,7 +39,7 @@ function toggle(list, value) {
  * Funnel filter sheet — type / category / account multi-select + date range,
  * all combinable. Edits a draft and only commits on Apply.
  */
-export default function FilterSheet({ open, onClose, categories, accounts, filters, onApply }) {
+export default function FilterSheet({ open, onClose, categories, accounts, trips = [], filters, onApply }) {
   const [draft, setDraft] = useState(filters)
 
   useEffect(() => {
@@ -131,6 +133,24 @@ export default function FilterSheet({ open, onClose, categories, accounts, filte
         ))}
       </div>
       <p className="-mt-3 mb-5 text-xs text-txt-muted">Transfers match either side.</p>
+
+      {/* Trip (only when trips exist) */}
+      {trips.length > 0 && (
+        <>
+          <FieldLabel>Trip</FieldLabel>
+          <div className="mb-5 flex flex-wrap gap-2">
+            {trips.map((t) => (
+              <TogglePill
+                key={t.id}
+                active={(draft.tripIds ?? []).includes(t.id)}
+                onClick={() => set({ tripIds: toggle(draft.tripIds ?? [], t.id) })}
+              >
+                {t.name}
+              </TogglePill>
+            ))}
+          </div>
+        </>
+      )}
 
       {/* Date range */}
       <FieldLabel>Date range</FieldLabel>

@@ -34,6 +34,7 @@ function emptyForm() {
     accountId: '',
     fromAccountId: '',
     toAccountId: '',
+    tripId: '',
   }
 }
 
@@ -48,6 +49,7 @@ function formFromTx(tx) {
     accountId: tx.accountId ?? '',
     fromAccountId: tx.fromAccountId ?? '',
     toAccountId: tx.toAccountId ?? '',
+    tripId: tx.tripId ?? '',
   }
 }
 
@@ -57,7 +59,9 @@ export default function TransactionForm({
   onSaved,
   accounts,
   categories,
+  trips = [],
   editingTx,
+  prefillAmount,
   onMetaChanged,
 }) {
   const [form, setForm] = useState(emptyForm)
@@ -77,7 +81,11 @@ export default function TransactionForm({
   // focus the amount field so quick-add is type-ready immediately.
   useEffect(() => {
     if (!open) return
-    setForm(editingTx ? formFromTx(editingTx) : emptyForm())
+    const base = editingTx ? formFromTx(editingTx) : emptyForm()
+    // A new transaction can arrive with the amount pre-filled (Android
+    // share/notification auto-fill). Only seeds the amount, nothing else.
+    if (!editingTx && prefillAmount) base.amount = toAmountInputValue(prefillAmount)
+    setForm(base)
     setError('')
     setConfirmDelete(false)
     setMini(null)
@@ -85,7 +93,7 @@ export default function TransactionForm({
     appliedDescRef.current = editingTx?.description || ''
     const t = setTimeout(() => document.getElementById('tx-amount')?.focus(), 80)
     return () => clearTimeout(t)
-  }, [open, editingTx])
+  }, [open, editingTx, prefillAmount])
 
   // Debounced description-memory lookup: only while typing something new
   // (≥2 chars) that we didn't just prefill.
@@ -129,6 +137,18 @@ export default function TransactionForm({
     if (form.type === 'transfer') return []
     return categories.filter((c) => c.kind === form.type)
   }, [categories, form.type])
+
+  // Trips offered in the (optional) trip tag: active ones + the currently
+  // tagged trip even if archived (edit mode). Hidden entirely when empty.
+  const tripChoices = useMemo(() => {
+    const active = trips.filter((t) => !t.archived)
+    const curId = Number(form.tripId)
+    if (form.tripId && !active.some((t) => t.id === curId)) {
+      const cur = trips.find((t) => t.id === curId)
+      if (cur) return [cur, ...active]
+    }
+    return active
+  }, [trips, form.tripId])
 
   function changeType(type) {
     setError('')
@@ -179,6 +199,7 @@ export default function TransactionForm({
       accountId: form.type === 'transfer' ? null : Number(form.accountId),
       fromAccountId: form.type === 'transfer' ? Number(form.fromAccountId) : null,
       toAccountId: form.type === 'transfer' ? Number(form.toAccountId) : null,
+      tripId: form.type === 'transfer' || !form.tripId ? null : Number(form.tripId),
     }
     try {
       if (isEdit) await updateTransaction(editingTx.id, payload)
@@ -383,6 +404,34 @@ export default function TransactionForm({
                     options={visibleCategories.map((c) => ({ value: c.id, label: c.name }))}
                     onAddNew={() => setMini('category')}
                   />
+                </div>
+              )}
+
+              {/* Trip tag (optional; only shown once you have trips) */}
+              {form.type !== 'transfer' && tripChoices.length > 0 && (
+                <div className="mb-4">
+                  <label htmlFor="tx-trip" className="mb-1.5 block text-sm text-txt-secondary">
+                    Trip <span className="text-txt-muted">(optional)</span>
+                  </label>
+                  <select
+                    id="tx-trip"
+                    value={form.tripId === '' || form.tripId == null ? '' : String(form.tripId)}
+                    onChange={(e) => set({ tripId: e.target.value })}
+                    className="w-full appearance-none rounded-2xl border border-hairline bg-elevated px-4 py-3 text-txt-primary focus:outline-none focus:ring-1 focus:ring-accent/50"
+                    style={{
+                      backgroundImage:
+                        "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239BA1AC' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>\")",
+                      backgroundRepeat: 'no-repeat',
+                      backgroundPosition: 'right 14px center',
+                    }}
+                  >
+                    <option value="">No trip</option>
+                    {tripChoices.map((t) => (
+                      <option key={t.id} value={String(t.id)}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               )}
 

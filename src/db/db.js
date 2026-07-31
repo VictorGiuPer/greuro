@@ -86,3 +86,19 @@ db.version(2).stores({
 db.version(3).stores({
   goals: '++id',
 })
+
+/**
+ * v4 (additive):
+ *
+ * trips (travel grouping — tag transactions to a trip to see holiday spend):
+ *   id, name, days (duration used for the per-day figure), archived (0|1),
+ *   createdAt, updatedAt
+ *
+ * transactions gains an indexed `tripId` (num|null) so a trip's spend is a
+ * fast lookup. Re-declaring the store here just adds that index; existing
+ * rows have no tripId and are simply absent from it.
+ */
+db.version(4).stores({
+  trips: '++id',
+  transactions: '++id, date, type, categoryId, accountId, tripId, [date+id]',
+})

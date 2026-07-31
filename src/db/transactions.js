@@ -22,6 +22,8 @@ function normalize(data) {
     accountId: null,
     fromAccountId: null,
     toAccountId: null,
+    // Optional travel tag (any type may carry it; only expenses count as spend).
+    tripId: data.tripId != null && data.tripId !== '' ? Number(data.tripId) : null,
   }
   if (type === 'transfer') {
     base.fromAccountId = data.fromAccountId ?? null
@@ -73,9 +75,10 @@ function pagedCollection(before, dateFrom = null, dateTo = null) {
 }
 
 /** True when a transaction passes the given (already-normalized) filters. */
-function matchesFilters(t, { types, categoryIds, accountIds, query }) {
+function matchesFilters(t, { types, categoryIds, accountIds, tripIds, query }) {
   if (types && !types.has(t.type)) return false
   if (categoryIds && !categoryIds.has(t.categoryId)) return false
+  if (tripIds && !tripIds.has(t.tripId)) return false
   if (accountIds) {
     // Transfers match on either side.
     const hit =
@@ -108,9 +111,11 @@ export async function getTransactionsPage({ limit = 30, before = null, filters =
     types: f.types?.length ? new Set(f.types) : null,
     categoryIds: f.categoryIds?.length ? new Set(f.categoryIds.map(Number)) : null,
     accountIds: f.accountIds?.length ? new Set(f.accountIds.map(Number)) : null,
+    tripIds: f.tripIds?.length ? new Set(f.tripIds.map(Number)) : null,
     query: f.query?.trim() ? f.query.trim().toLowerCase() : null,
   }
-  const needsPredicate = norm.types || norm.categoryIds || norm.accountIds || norm.query
+  const needsPredicate =
+    norm.types || norm.categoryIds || norm.accountIds || norm.tripIds || norm.query
 
   const bounded = needsPredicate
     ? collection.filter((t) => matchesFilters(t, norm))

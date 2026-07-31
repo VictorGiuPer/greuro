@@ -56,3 +56,12 @@ export {
   deleteGoal,
   computeGoalProgress,
 } from './goals'
+export {
+  getTrips,
+  getActiveTrips,
+  addTrip,
+  updateTrip,
+  deleteTrip,
+  countTripUsage,
+  computeTripSpend,
+} from './trips'

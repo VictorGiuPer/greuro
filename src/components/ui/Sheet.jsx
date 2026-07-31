@@ -5,11 +5,12 @@
 export default function Sheet({ open, onClose, label, children }) {
   return (
     <>
-      {/* Scrim */}
+      {/* Scrim — high z so a sheet can layer above full-screen overlays
+          (e.g. editing a trip from within the Settings overlay). */}
       <div
         onClick={onClose}
         aria-hidden="true"
-        className={`fixed inset-0 z-40 bg-black/60 transition-opacity ${
+        className={`fixed inset-0 z-[60] bg-black/60 transition-opacity ${
           open ? 'opacity-100' : 'pointer-events-none opacity-0'
         }`}
       />
@@ -19,7 +20,7 @@ export default function Sheet({ open, onClose, label, children }) {
         aria-modal="true"
         aria-label={label}
         aria-hidden={open ? undefined : 'true'}
-        className={`fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-[430px] rounded-t-[24px] border-t border-hairline bg-card transition-transform duration-300 ${
+        className={`fixed inset-x-0 bottom-0 z-[70] mx-auto w-full max-w-[430px] rounded-t-[24px] border-t border-hairline bg-card transition-transform duration-300 ${
           open ? 'translate-y-0' : 'pointer-events-none translate-y-full'
         }`}
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}

@@ -8,6 +8,8 @@ import {
   Upload,
   Sprout,
   Trash2,
+  Plane,
+  Smartphone,
 } from 'lucide-react'
 import {
   addAccount,
@@ -21,6 +23,7 @@ import {
   setSetting,
   seedIfEmpty,
   accountUsage,
+  getTrips,
 } from '../../db'
 import { wipeAllData } from '../../db/maintenance'
 import { exportBackupFile } from '../../db/backup'
@@ -32,6 +35,8 @@ import AccountForm from './AccountForm'
 import CategoryForm from './CategoryForm'
 import ImportJson from './ImportJson'
 import BlueCoinsImport from './BlueCoinsImport'
+import TripForm from '../TripForm'
+import AutofillGuide from './AutofillGuide'
 
 /**
  * Full-screen Settings overlay for managing accounts and categories. Reads the
@@ -52,6 +57,12 @@ export default function Settings({ open, onClose, accounts, categories, onChange
   const [busy, setBusy] = useState(false)
   const [lastBackupAt, setLastBackupAt] = useState(null)
   const [mainAccountId, setMainAccountId] = useState(null)
+  // Trips
+  const [tripList, setTripList] = useState([])
+  const [tripFormOpen, setTripFormOpen] = useState(false)
+  const [editingTrip, setEditingTrip] = useState(null)
+  // Android auto-fill guide
+  const [guideOpen, setGuideOpen] = useState(false)
 
   // Reset + (re)load preferences whenever the overlay is (re)opened.
   useEffect(() => {
@@ -61,6 +72,9 @@ export default function Settings({ open, onClose, accounts, categories, onChange
     setDataNote('')
     setPrefsNote('')
     setWipeText('')
+    setTripFormOpen(false)
+    setGuideOpen(false)
+    getTrips().then(setTripList)
     getSettings().then((s) => {
       setLastBackupAt(s.lastBackupAt)
       setMainAccountId(s.mainAccountId)
@@ -135,6 +149,12 @@ export default function Settings({ open, onClose, accounts, categories, onChange
     } finally {
       setBusy(false)
     }
+  }
+
+  async function handleTripSaved() {
+    setTripFormOpen(false)
+    setTripList(await getTrips())
+    await onChanged()
   }
 
   const expenseCats = categories.filter((c) => c.kind === 'expense')
@@ -277,6 +297,46 @@ export default function Settings({ open, onClose, accounts, categories, onChange
               <CategoryGroup label="Income" items={incomeCats} onEdit={(c) => setEditor({ type: 'category', item: c })} />
             </Section>
 
+            {/* Trips */}
+            <Section
+              title="Trips"
+              actionLabel="Add Trip"
+              onAction={() => {
+                setEditingTrip(null)
+                setTripFormOpen(true)
+              }}
+            >
+              <div className="overflow-hidden rounded-card border border-hairline bg-card">
+                {tripList.length === 0 && <Empty>No trips yet.</Empty>}
+                {tripList.map((t, i) => (
+                  <Row
+                    key={t.id}
+                    divider={i > 0}
+                    onClick={() => {
+                      setEditingTrip(t)
+                      setTripFormOpen(true)
+                    }}
+                    left={
+                      <div className="flex items-center gap-3">
+                        <Plane size={18} className="text-txt-secondary" aria-hidden="true" />
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-medium text-txt-primary">{t.name}</span>
+                            {t.archived ? (
+                              <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-txt-secondary">
+                                Archived
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="text-sm text-txt-secondary">{t.days} days</div>
+                        </div>
+                      </div>
+                    }
+                  />
+                ))}
+              </div>
+            </Section>
+
             {/* Preferences */}
             {prefs && (
               <section className="mb-8">
@@ -409,6 +469,19 @@ export default function Settings({ open, onClose, accounts, categories, onChange
               </div>
             </section>
 
+            {/* Auto-fill from notifications (Android) */}
+            <section className="mb-8">
+              <h2 className="mb-3 text-base font-semibold text-txt-primary">Automation</h2>
+              <div className="overflow-hidden rounded-card border border-hairline bg-card">
+                <DataRow
+                  icon={Smartphone}
+                  title="Auto-fill from notifications (Android)"
+                  subtitle="Prefill the amount from a Google Pay notification via Tasker"
+                  onClick={() => setGuideOpen(true)}
+                />
+              </div>
+            </section>
+
             {/* About */}
             <section className="mb-8">
               <h2 className="mb-3 text-base font-semibold text-txt-primary">About</h2>
@@ -440,6 +513,13 @@ export default function Settings({ open, onClose, accounts, categories, onChange
         onClose={() => setDataView(null)}
         onImported={onChanged}
       />
+      <TripForm
+        open={tripFormOpen}
+        onClose={() => setTripFormOpen(false)}
+        onSaved={handleTripSaved}
+        editingTrip={editingTrip}
+      />
+      <AutofillGuide open={guideOpen} onClose={() => setGuideOpen(false)} />
     </div>
   )
 }

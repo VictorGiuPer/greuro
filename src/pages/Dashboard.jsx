@@ -13,6 +13,8 @@ import {
   accountUsage,
   getActiveGoal,
   computeGoalProgress,
+  getActiveTrips,
+  computeTripSpend,
 } from '../db'
 import { periodRange, customRange, todayNoon, addDays } from '../lib/dates'
 import { formatDate } from '../lib/format'
@@ -23,11 +25,13 @@ import NetEarningsCard from '../components/dashboard/NetEarningsCard'
 import CashFlowCard from '../components/dashboard/CashFlowCard'
 import ForecastCard from '../components/dashboard/ForecastCard'
 import SavingsCard from '../components/dashboard/SavingsCard'
+import TripCard from '../components/dashboard/TripCard'
 import MonthlyReport from '../components/MonthlyReport'
 import Settings from '../components/settings/Settings'
 import TransactionForm from '../components/TransactionForm'
 import GoalForm from '../components/GoalForm'
 import AddSavingsSheet from '../components/AddSavingsSheet'
+import TripForm from '../components/TripForm'
 import Fab from '../components/ui/Fab'
 
 /**
@@ -35,7 +39,7 @@ import Fab from '../components/ui/Fab'
  * period: spending donut, net earnings, per-account cash flow, and the
  * forward net-worth forecast.
  */
-export default function Dashboard() {
+export default function Dashboard({ prefillAmount, onPrefillConsumed }) {
   const [accounts, setAccounts] = useState([])
   const [categories, setCategories] = useState([])
   const [scheduled, setScheduled] = useState([])
@@ -49,6 +53,12 @@ export default function Dashboard() {
   const [goal, setGoal] = useState(null)
   const [goalProgress, setGoalProgress] = useState(null)
   const [refreshToken, setRefreshToken] = useState(0)
+  // Trips
+  const [trips, setTrips] = useState([])
+  const [tripId, setTripId] = useState(null)
+  const [tripSpend, setTripSpend] = useState(null)
+  const [tripFormOpen, setTripFormOpen] = useState(false)
+  const [editingTrip, setEditingTrip] = useState(null)
 
   const [period, setPeriod] = useState({
     kind: 'month',
@@ -70,23 +80,56 @@ export default function Dashboard() {
   )
 
   const reloadMeta = useCallback(async () => {
-    const [accs, cats, sched, sett, activeGoal] = await Promise.all([
+    const [accs, cats, sched, sett, activeGoal, activeTrips] = await Promise.all([
       getAccounts(),
       getCategories(),
       getScheduled(),
       getSettings(),
       getActiveGoal(),
+      getActiveTrips(),
     ])
     setAccounts(accs)
     setCategories(cats)
     setScheduled(sched)
     setSettingsState(sett)
     setGoal(activeGoal)
+    setTrips(activeTrips)
   }, [])
 
   useEffect(() => {
     reloadMeta()
   }, [reloadMeta])
+
+  // Keep the selected trip valid as the trip list changes (default = first).
+  useEffect(() => {
+    if (trips.length === 0) {
+      setTripId(null)
+      return
+    }
+    setTripId((cur) => (cur != null && trips.some((t) => t.id === cur) ? cur : trips[0].id))
+  }, [trips])
+
+  // Derive the selected trip's spend (re-runs when a transaction changes).
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      const trip = trips.find((t) => t.id === tripId)
+      if (!trip) {
+        setTripSpend(null)
+        return
+      }
+      const s = await computeTripSpend(trip)
+      if (active) setTripSpend(s)
+    })()
+    return () => {
+      active = false
+    }
+  }, [tripId, trips, refreshToken])
+
+  // Android auto-fill: a prefilled amount arrives → open a new transaction.
+  useEffect(() => {
+    if (prefillAmount != null) setTxFormOpen(true)
+  }, [prefillAmount])
 
   // The main everyday account (a persisted tag) — default for cash flow +
   // savings; falls back to the first active account.
@@ -165,8 +208,14 @@ export default function Dashboard() {
     setSettingsState((s) => ({ ...s, [key]: value }))
   }
 
+  function closeTxForm() {
+    setTxFormOpen(false)
+    onPrefillConsumed?.() // clear any pending Android prefill
+  }
+
   function handleTxSaved() {
     setTxFormOpen(false)
+    onPrefillConsumed?.()
     setRefreshToken((n) => n + 1) // re-derive all dashboard numbers
   }
 
@@ -178,6 +227,12 @@ export default function Dashboard() {
   async function handleSavingsAdjusted() {
     setAddSavingsOpen(false)
     await reloadMeta()
+  }
+
+  async function handleTripSaved() {
+    setTripFormOpen(false)
+    await reloadMeta()
+    setRefreshToken((n) => n + 1)
   }
 
   const periodLabel =
@@ -243,6 +298,21 @@ export default function Dashboard() {
           onSetMain={() => setSettingsOpen(true)}
         />
 
+        <TripCard
+          trips={trips}
+          tripId={tripId}
+          spend={tripSpend}
+          onSelect={setTripId}
+          onCreate={() => {
+            setEditingTrip(null)
+            setTripFormOpen(true)
+          }}
+          onEdit={() => {
+            setEditingTrip(trips.find((t) => t.id === tripId) ?? null)
+            setTripFormOpen(true)
+          }}
+        />
+
         {settings && (
           <ForecastCard
             accounts={investmentAccounts}
@@ -266,11 +336,13 @@ export default function Dashboard() {
 
       <TransactionForm
         open={txFormOpen}
-        onClose={() => setTxFormOpen(false)}
+        onClose={closeTxForm}
         onSaved={handleTxSaved}
         accounts={accounts}
         categories={categories}
+        trips={trips}
         editingTx={null}
+        prefillAmount={prefillAmount}
         onMetaChanged={reloadMeta}
       />
 
@@ -279,6 +351,13 @@ export default function Dashboard() {
         onClose={() => setGoalFormOpen(false)}
         onSaved={handleGoalSaved}
         editingGoal={goal}
+      />
+
+      <TripForm
+        open={tripFormOpen}
+        onClose={() => setTripFormOpen(false)}
+        onSaved={handleTripSaved}
+        editingTrip={editingTrip}
       />
 
       <AddSavingsSheet

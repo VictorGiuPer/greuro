@@ -18,6 +18,14 @@ export default defineConfig({
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/greuro/',
+        // Android auto-fill: let other apps SHARE text (e.g. a payment
+        // notification) into greuro. Arrives as ?title/?text on the app root,
+        // which App.jsx parses into a prefilled transaction. iOS ignores this.
+        share_target: {
+          action: '/greuro/',
+          method: 'GET',
+          params: { title: 'title', text: 'text', url: 'url' },
+        },
         // Android's launcher pulls 192; the install dialog / splash uses 512.
         // Both sizes present keeps Chrome's installability check happy, which
         // is what lets `beforeinstallprompt` (our Install button) fire at all.

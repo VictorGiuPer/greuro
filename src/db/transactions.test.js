@@ -85,6 +85,21 @@ describe('getTransactionsPage filters', () => {
     const rows = await collectAllPages(null, 4)
     expect(rows).toHaveLength(10)
   })
+
+  it('filters by trip tag', async () => {
+    const trip = await db.trips.add({ name: 'Trip', days: 3 })
+    await addTransaction({
+      type: 'expense', amount: 40, date: noon(2026, 6, 5),
+      description: 'Hotel', categoryId: catFood, accountId: a1, tripId: trip,
+    })
+    await addTransaction({
+      type: 'expense', amount: 15, date: noon(2026, 6, 6),
+      description: 'Dinner', categoryId: catFood, accountId: a1, tripId: trip,
+    })
+    const rows = await collectAllPages({ tripIds: [trip] })
+    expect(rows.map((r) => r.description).sort()).toEqual(['Dinner', 'Hotel'])
+    expect(rows.every((r) => r.tripId === trip)).toBe(true)
+  })
 })
 
 describe('getDescriptionSuggestions', () => {

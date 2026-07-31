@@ -19,20 +19,22 @@ import { setSetting } from './settings'
 export const BACKUP_FORMAT = 'budget-app-backup'
 export const BACKUP_VERSION = 1
 
-const TABLES = ['accounts', 'categories', 'transactions', 'scheduled', 'settings', 'goals']
-// Tables an older backup file MUST contain; goals may be absent (older export).
+const TABLES = ['accounts', 'categories', 'transactions', 'scheduled', 'settings', 'goals', 'trips']
+// Tables an older backup file MUST contain; goals/trips may be absent (older export).
 const REQUIRED_TABLES = ['accounts', 'categories', 'transactions', 'scheduled', 'settings']
+// Additive tables introduced later — imported as [] when missing from a file.
+const OPTIONAL_TABLES = ['goals', 'trips']
 
 /** Read the whole database into a plain versioned object. */
 export async function buildBackup() {
-  const [accounts, categories, transactions, scheduled, settings, goals] = await Promise.all(
+  const [accounts, categories, transactions, scheduled, settings, goals, trips] = await Promise.all(
     TABLES.map((t) => db[t].toArray()),
   )
   return {
     format: BACKUP_FORMAT,
     version: BACKUP_VERSION,
     exportedAt: new Date().toISOString(),
-    data: { accounts, categories, transactions, scheduled, settings, goals },
+    data: { accounts, categories, transactions, scheduled, settings, goals, trips },
   }
 }
 
@@ -64,8 +66,10 @@ export function validateBackup(obj) {
     if (!Array.isArray(obj.data[t])) return { ok: false, error: `Backup is missing "${t}".` }
     counts[t] = obj.data[t].length
   }
-  // goals is optional (absent in pre-v3 exports).
-  counts.goals = Array.isArray(obj.data.goals) ? obj.data.goals.length : 0
+  // goals/trips are optional (absent in older exports).
+  for (const t of OPTIONAL_TABLES) {
+    counts[t] = Array.isArray(obj.data[t]) ? obj.data[t].length : 0
+  }
   const badTx = obj.data.transactions.find(
     (t) => typeof t.amount !== 'number' || typeof t.date !== 'number' || !t.type,
   )
@@ -86,8 +90,9 @@ export async function applyBackup(obj, mode) {
   if (!valid.ok) throw new Error(valid.error)
   const { accounts, categories, transactions, scheduled, settings } = obj.data
   const goals = Array.isArray(obj.data.goals) ? obj.data.goals : []
+  const trips = Array.isArray(obj.data.trips) ? obj.data.trips : []
 
-  const imported = { accounts: 0, categories: 0, transactions: 0, scheduled: 0, settings: 0, goals: 0 }
+  const imported = { accounts: 0, categories: 0, transactions: 0, scheduled: 0, settings: 0, goals: 0, trips: 0 }
 
   await db.transaction('rw', TABLES.map((t) => db[t]), async () => {
     if (mode === 'replace') {
@@ -98,12 +103,14 @@ export async function applyBackup(obj, mode) {
       await db.scheduled.bulkAdd(scheduled)
       await db.settings.bulkAdd(settings)
       await db.goals.bulkAdd(goals)
+      await db.trips.bulkAdd(trips)
       imported.accounts = accounts.length
       imported.categories = categories.length
       imported.transactions = transactions.length
       imported.scheduled = scheduled.length
       imported.settings = settings.length
       imported.goals = goals.length
+      imported.trips = trips.length
       return
     }
 
@@ -142,6 +149,14 @@ export async function applyBackup(obj, mode) {
       }
     }
 
+    // Trips are inserted fresh; keep an old→new id map to remap tripId.
+    const tripIdMap = new Map()
+    for (const trip of trips) {
+      const newId = await db.trips.add(stripId(trip))
+      tripIdMap.set(trip.id, newId)
+      imported.trips += 1
+    }
+
     const remapRefs = (row) => ({
       ...row,
       categoryId: row.categoryId != null ? (categoryIdMap.get(row.categoryId) ?? null) : null,
@@ -149,6 +164,7 @@ export async function applyBackup(obj, mode) {
       fromAccountId:
         row.fromAccountId != null ? (accountIdMap.get(row.fromAccountId) ?? null) : null,
       toAccountId: row.toAccountId != null ? (accountIdMap.get(row.toAccountId) ?? null) : null,
+      tripId: row.tripId != null ? (tripIdMap.get(row.tripId) ?? null) : null,
     })
 
     for (const t of transactions) {
