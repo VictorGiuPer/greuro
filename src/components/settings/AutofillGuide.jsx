@@ -4,15 +4,40 @@ import Sheet from '../ui/Sheet'
 
 /**
  * How-to for the Android auto-fill. greuro can't read notifications itself
- * (no app should be able to, and iOS forbids it entirely) — instead an
- * automation app that DOES have notification access (Tasker / MacroDroid)
- * reads the Google Pay notification and hands greuro the amount, which opens
- * a prefilled transaction. This screen only lives in Settings.
+ * (no app should be able to, and iOS forbids it entirely) — instead ANY
+ * automation app with notification access reads the Google Pay notification
+ * and hands greuro the amount via a URL, which opens a prefilled transaction.
+ * Deliberately app-agnostic: greuro only cares that a URL gets opened, not
+ * what opened it — MacroDroid, Automate and Tasker all work identically.
+ * This screen only lives in Settings.
  */
+const APPS = [
+  {
+    name: 'MacroDroid',
+    free: 'Free',
+    trigger: 'Trigger → Notification → Received, select Google Pay',
+    action: 'Action → Connectivity → Open Link (URL)',
+  },
+  {
+    name: 'Automate',
+    free: 'Free',
+    trigger: 'Block → Notification → Google Pay',
+    action: 'Block → Interface → Browse URL',
+  },
+  {
+    name: 'Tasker',
+    free: '~€3.50 one-time',
+    trigger: 'Profile → Event → UI → Notification, owner app = Google Pay',
+    action: 'Task action → Net → Browse URL',
+  },
+]
+
 export default function AutofillGuide({ open, onClose }) {
   const base = `${window.location.origin}${import.meta.env.BASE_URL}`
   const example = `${base}?amount=%amount`
   const [copied, setCopied] = useState(false)
+  const [appIdx, setAppIdx] = useState(0)
+  const app = APPS[appIdx]
 
   async function copy() {
     try {
@@ -39,27 +64,48 @@ export default function AutofillGuide({ open, onClose }) {
 
       <p className="mb-4 text-sm leading-relaxed text-txt-secondary">
         greuro can’t read your notifications itself — apps aren’t allowed to. Instead, a small
-        automation app that <em>does</em> have notification access (e.g.{' '}
-        <span className="text-txt-primary">Tasker</span> or MacroDroid) reads the Google Pay
-        notification and opens greuro with the amount already filled in.
+        automation app that <em>does</em> have notification access reads the Google Pay
+        notification and opens greuro with the amount already filled in. Any of these work — pick
+        the one you already have, or a free one:
       </p>
+
+      {/* App picker */}
+      <div className="mb-4 flex gap-2">
+        {APPS.map((a, i) => (
+          <button
+            key={a.name}
+            type="button"
+            onClick={() => setAppIdx(i)}
+            aria-pressed={i === appIdx}
+            className={`flex-1 rounded-xl border px-2 py-2 text-center transition-colors ${
+              i === appIdx
+                ? 'border-accent/60 bg-accent/15 text-accent'
+                : 'border-hairline bg-elevated text-txt-secondary'
+            }`}
+          >
+            <div className="text-sm font-semibold">{a.name}</div>
+            <div className="text-[11px] opacity-70">{a.free}</div>
+          </button>
+        ))}
+      </div>
 
       <ol className="mb-4 space-y-3 text-sm text-txt-secondary">
         <li>
           <span className="font-semibold text-txt-primary">1.</span> Install greuro to your home
-          screen (Settings → About → Install), and install Tasker.
+          screen (Settings → About → Install), and install {app.name}.
         </li>
         <li>
-          <span className="font-semibold text-txt-primary">2.</span> In Tasker, add a{' '}
-          <span className="text-txt-primary">Profile → Event → UI → Notification</span>, owner app
-          = Google Pay. Capture the amount into a variable (e.g. a regex like{' '}
+          <span className="font-semibold text-txt-primary">2.</span> Add a notification trigger:{' '}
+          <span className="text-txt-primary">{app.trigger}</span>. Capture the amount into a
+          variable — a regex like{' '}
           <code className="rounded bg-white/10 px-1">(\d+[.,]\d{2})</code> on the notification
-          text).
+          text works in all three apps.
         </li>
         <li>
-          <span className="font-semibold text-txt-primary">3.</span> Add a Task action{' '}
-          <span className="text-txt-primary">Net → Browse URL</span> with this URL (replace{' '}
-          <code className="rounded bg-white/10 px-1">%amount</code> with your captured variable):
+          <span className="font-semibold text-txt-primary">3.</span>{' '}
+          <span className="text-txt-primary">{app.action}</span> with this URL (replace{' '}
+          <code className="rounded bg-white/10 px-1">%amount</code> with your captured variable —
+          each app has its own variable syntax):
         </li>
       </ol>
 
@@ -77,13 +123,15 @@ export default function AutofillGuide({ open, onClose }) {
       </div>
 
       <p className="mb-2 text-sm text-txt-secondary">
-        Tapping the notification (or running the task) opens greuro straight to a new transaction
-        with the amount filled — you just add the description and save.
+        Running the automation opens greuro straight to a new transaction with the amount filled —
+        you just add the description and save.
       </p>
       <p className="text-xs leading-snug text-txt-muted">
-        Alternatively, any app’s “Share” can send text to greuro (it’s registered as a share
-        target) and greuro will pull the amount out. iPhone can’t read notifications, so this
-        Android-only — nothing here affects the app on iOS.
+        Any app that can open a URL or share text works — the exact menu names above vary by
+        app version, but the concept (notification → regex → open URL) is the same everywhere.
+        Alternatively, any app’s “Share” can send text to greuro directly (it’s registered as a
+        share target) and greuro will pull the amount out of it. iPhone can’t read notifications
+        at all, so this is Android-only — nothing here affects the app on iOS.
       </p>
     </Sheet>
   )
