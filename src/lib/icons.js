@@ -22,6 +22,7 @@ import {
   Circle,
   ArrowLeftRight,
   Wallet,
+  Scale,
 } from 'lucide-react'
 
 /**
@@ -53,6 +54,8 @@ const ICONS = {
   Circle,
   ArrowLeftRight,
   Wallet,
+  // Used for balance-adjustment rows (not offered in the category picker).
+  Scale,
 }
 
 export function getIcon(name) {

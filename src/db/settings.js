@@ -28,6 +28,9 @@ export const SETTINGS_DEFAULTS = {
   cashFlowAccountId: null,
   // The everyday account the savings tracker + cash-flow default use.
   mainAccountId: null,
+  // "YYYY-MM" of the last month whose report the user has opened — drives
+  // the Overview notification dot ("last month's report is ready").
+  lastReportSeenMonth: null,
 }
 
 /** All settings merged over defaults -> plain object. */

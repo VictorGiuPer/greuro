@@ -16,7 +16,7 @@ import {
   getActiveTrips,
   computeTripSpend,
 } from '../db'
-import { periodRange, customRange, todayNoon, addDays } from '../lib/dates'
+import { periodRange, customRange, todayNoon, addDays, previousMonthKey } from '../lib/dates'
 import { formatDate } from '../lib/format'
 import PeriodPicker from '../components/dashboard/PeriodPicker'
 import SpendingDonut from '../components/dashboard/SpendingDonut'
@@ -94,6 +94,9 @@ export default function Dashboard({ prefillAmount, onPrefillConsumed }) {
     setSettingsState(sett)
     setGoal(activeGoal)
     setTrips(activeTrips)
+    // A Settings edit may have written a transaction (balance correction), so
+    // re-derive the period figures and balances too.
+    setRefreshToken((n) => n + 1)
   }, [])
 
   useEffect(() => {
@@ -240,6 +243,18 @@ export default function Dashboard({ prefillAmount, onPrefillConsumed }) {
       ? `${formatDate(range.from)} – ${formatDate(range.to)}`
       : `This ${period.kind}`
 
+  // Notification dot: last month's report hasn't been opened yet this month.
+  const lastMonthKey = useMemo(() => previousMonthKey(), [])
+  const showReportBadge = Boolean(settings) && settings.lastReportSeenMonth !== lastMonthKey
+
+  async function openReport() {
+    setReportOpen(true)
+    if (showReportBadge) {
+      await setSetting('lastReportSeenMonth', lastMonthKey)
+      setSettingsState((s) => ({ ...s, lastReportSeenMonth: lastMonthKey }))
+    }
+  }
+
   return (
     <div className="relative min-h-dvh pb-24">
       <header className="safe-pt sticky top-0 z-30 flex min-h-[70px] items-center justify-between bg-bg/90 px-4 pb-2 backdrop-blur">
@@ -251,12 +266,18 @@ export default function Dashboard({ prefillAmount, onPrefillConsumed }) {
         <div className="flex gap-2">
           <button
             type="button"
-            onClick={() => setReportOpen(true)}
+            onClick={openReport}
             title="Monthly report"
-            aria-label="Monthly report"
-            className="flex h-[44px] w-[44px] items-center justify-center rounded-2xl border border-hairline bg-card text-txt-secondary hover:text-txt-primary"
+            aria-label={showReportBadge ? 'Monthly report — last month is ready' : 'Monthly report'}
+            className="relative flex h-[44px] w-[44px] items-center justify-center rounded-2xl border border-hairline bg-card text-txt-secondary hover:text-txt-primary"
           >
             <FileText size={18} />
+            {showReportBadge && (
+              <span
+                className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full bg-accent ring-2 ring-card"
+                aria-hidden="true"
+              />
+            )}
           </button>
           <button
             type="button"

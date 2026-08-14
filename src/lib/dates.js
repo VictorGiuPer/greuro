@@ -135,6 +135,21 @@ export function previousPeriod(range) {
   return periodRange(range.kind, prevRef)
 }
 
+/** "YYYY-MM" key for a calendar month — a stable id for "have I seen this
+ *  month's report yet" style bookkeeping. */
+export function monthKey(y, mIdx) {
+  return `${y}-${String(mIdx + 1).padStart(2, '0')}`
+}
+
+/** The "YYYY-MM" key of the calendar month immediately before `refMs`. */
+export function previousMonthKey(refMs = Date.now()) {
+  const d = new Date(refMs)
+  const mIdx = d.getMonth() - 1
+  const y = d.getFullYear() + Math.floor(mIdx / 12)
+  const m = ((mIdx % 12) + 12) % 12
+  return monthKey(y, m)
+}
+
 /** Full-day range for a specific calendar month (month-index). */
 export function monthRange(y, mIdx) {
   return {

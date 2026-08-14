@@ -1,4 +1,5 @@
 import { db } from './db'
+import { effectiveAmount } from '../lib/txAmount'
 
 /**
  * Trips — a light travel grouping. Tag transactions with a `tripId` to see how
@@ -75,8 +76,10 @@ export async function computeTripSpend(trip) {
   let count = 0
   for (const t of txs) {
     if (t.type !== 'expense') continue
-    if (excluded.has(t.categoryId)) continue
-    total += Number(t.amount) || 0
+    // Balance adjustments / balance-only categories aren't trip spend.
+    if (t.isAdjustment || excluded.has(t.categoryId)) continue
+    // Net of anything a travel companion paid back.
+    total += effectiveAmount(t)
     count += 1
   }
   const days = Math.max(1, Number(trip.days) || 1)

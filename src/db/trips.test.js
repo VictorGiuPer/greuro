@@ -58,6 +58,28 @@ describe('computeTripSpend', () => {
     expect(spend.perDay).toBe(75)
   })
 
+  it('counts a shared expense net of what travel companions paid back, once resolved', async () => {
+    const id = await addTrip({ name: 'Trip', days: 2 })
+    const trip = await db.trips.get(id)
+    await addTransaction({
+      type: 'expense', amount: 300, date: noon(2026, 5, 1), categoryId: food,
+      accountId: acct, tripId: id, reimbursable: 1, owedAmount: 100, resolved: 1,
+    })
+    const spend = await computeTripSpend(trip)
+    expect(spend.total).toBe(200) // 300 paid − 100 back
+    expect(spend.perDay).toBe(100)
+  })
+
+  it('ignores balance adjustments tagged to the trip', async () => {
+    const id = await addTrip({ name: 'Trip', days: 1 })
+    const trip = await db.trips.get(id)
+    await addTransaction({
+      type: 'expense', amount: 75, date: noon(2026, 5, 1), categoryId: null,
+      accountId: acct, tripId: id, isAdjustment: 1,
+    })
+    expect((await computeTripSpend(trip)).total).toBe(0)
+  })
+
   it('handles a trip with no spend', async () => {
     const id = await addTrip({ name: 'Empty', days: 3 })
     const spend = await computeTripSpend(await db.trips.get(id))

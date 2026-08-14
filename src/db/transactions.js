@@ -1,4 +1,5 @@
 import { db } from './db'
+import { outstandingAmount } from '../lib/txAmount'
 
 /**
  * Transaction CRUD + paged queries.
@@ -24,6 +25,16 @@ function normalize(data) {
     toAccountId: null,
     // Optional travel tag (any type may carry it; only expenses count as spend).
     tripId: data.tripId != null && data.tripId !== '' ? Number(data.tripId) : null,
+    // "Needs to be paid back": you fronted the money; `owedAmount` is the
+    // total you expect back, `resolved` is the explicit one-way flag that
+    // nets it off once received (see lib/txAmount.js). Expense-only.
+    reimbursable: 0,
+    owedAmount: 0,
+    paidBackNote: null,
+    resolved: 0,
+    // Balance corrections: still move the account balance, but are excluded
+    // from every income / expense / cash-flow statistic.
+    isAdjustment: data.isAdjustment ? 1 : 0,
   }
   if (type === 'transfer') {
     base.fromAccountId = data.fromAccountId ?? null
@@ -32,6 +43,13 @@ function normalize(data) {
     // expense | income
     base.categoryId = data.categoryId ?? null
     base.accountId = data.accountId ?? null
+  }
+  if (type === 'expense' && data.reimbursable) {
+    base.reimbursable = 1
+    base.owedAmount = Math.max(0, Number(data.owedAmount) || 0)
+    const note = (data.paidBackNote ?? '').trim()
+    base.paidBackNote = note || null
+    base.resolved = data.resolved ? 1 : 0
   }
   return base
 }
@@ -75,10 +93,11 @@ function pagedCollection(before, dateFrom = null, dateTo = null) {
 }
 
 /** True when a transaction passes the given (already-normalized) filters. */
-function matchesFilters(t, { types, categoryIds, accountIds, tripIds, query }) {
+function matchesFilters(t, { types, categoryIds, accountIds, tripIds, owedOnly, query }) {
   if (types && !types.has(t.type)) return false
   if (categoryIds && !categoryIds.has(t.categoryId)) return false
   if (tripIds && !tripIds.has(t.tripId)) return false
+  if (owedOnly && outstandingAmount(t) <= 0) return false
   if (accountIds) {
     // Transfers match on either side.
     const hit =
@@ -99,6 +118,8 @@ function matchesFilters(t, { types, categoryIds, accountIds, tripIds, query }) {
  * @param {string[]} [filters.types]        e.g. ['expense','income']
  * @param {number[]} [filters.categoryIds]
  * @param {number[]} [filters.accountIds]   transfers match either side
+ * @param {number[]} [filters.tripIds]
+ * @param {boolean} [filters.owedOnly]      only rows still owed back to you
  * @param {number|null} [filters.dateFrom]  inclusive ms bound
  * @param {number|null} [filters.dateTo]    inclusive ms bound
  * @param {string} [filters.query]          description substring (case-insensitive)
@@ -112,10 +133,11 @@ export async function getTransactionsPage({ limit = 30, before = null, filters =
     categoryIds: f.categoryIds?.length ? new Set(f.categoryIds.map(Number)) : null,
     accountIds: f.accountIds?.length ? new Set(f.accountIds.map(Number)) : null,
     tripIds: f.tripIds?.length ? new Set(f.tripIds.map(Number)) : null,
+    owedOnly: Boolean(f.owedOnly),
     query: f.query?.trim() ? f.query.trim().toLowerCase() : null,
   }
   const needsPredicate =
-    norm.types || norm.categoryIds || norm.accountIds || norm.tripIds || norm.query
+    norm.types || norm.categoryIds || norm.accountIds || norm.tripIds || norm.owedOnly || norm.query
 
   const bounded = needsPredicate
     ? collection.filter((t) => matchesFilters(t, norm))

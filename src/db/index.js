@@ -22,6 +22,8 @@ export {
   deleteAccount,
   countAccountUsage,
   accountUsage,
+  setAccountBalance,
+  BALANCE_ADJUSTMENT_LABEL,
 } from './accounts'
 export {
   getCategories,

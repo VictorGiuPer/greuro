@@ -81,6 +81,20 @@ describe('getTransactionsPage filters', () => {
     expect(rows.every((r) => r.description.toLowerCase().includes('cafe'))).toBe(true)
   })
 
+  it('owedOnly keeps only rows still owed back to you', async () => {
+    await addTransaction({
+      type: 'expense', amount: 100, date: noon(2026, 5, 25), description: 'Group dinner',
+      categoryId: catFood, accountId: a1, reimbursable: 1, owedAmount: 60,
+    })
+    await addTransaction({
+      type: 'expense', amount: 80, date: noon(2026, 5, 26), description: 'Settled lunch',
+      categoryId: catFood, accountId: a1, reimbursable: 1, owedAmount: 80, resolved: 1,
+    })
+
+    const rows = await collectAllPages({ owedOnly: true })
+    expect(rows.map((r) => r.description)).toEqual(['Group dinner'])
+  })
+
   it('empty filters return everything', async () => {
     const rows = await collectAllPages(null, 4)
     expect(rows).toHaveLength(10)

@@ -107,6 +107,69 @@ describe('monthlyReport', () => {
   })
 })
 
+describe('paid-back expenses net out everywhere once resolved', () => {
+  it('a 100 expense with 60 owed counts as 40 in balances and every stat, once resolved', async () => {
+    await db.transactions.add({
+      type: 'expense', amount: 100, date: noon(2026, 4, 26), description: 'Group dinner',
+      categoryId: food, accountId: checking, fromAccountId: null, toAccountId: null,
+      reimbursable: 1, owedAmount: 60, paidBackNote: 'Marc', resolved: 1,
+    })
+
+    const may = { from: noon(2026, 4, 1), to: noon(2026, 4, 31) }
+    // Balance moves by the NET (the 60 really came back to the account).
+    expect((await accountBalances()).get(checking)).toBe(4300 - 40)
+    // Spending, net earnings and cash flow all use the net too.
+    const foodRow = (await spendingByCategory(may)).find((r) => r.categoryId === food)
+    expect(foodRow.total).toBe(200 + 40)
+    expect((await incomeExpenseTotals(may)).expense).toBe(1000 + 40)
+    const cf = await cashFlow({ accountId: checking, ...may })
+    expect(cf.outflow).toBe(1800 + 40)
+    // No phantom income row is created for the reimbursement.
+    expect((await incomeExpenseTotals(may)).income).toBe(3000)
+  })
+
+  it('a pending (unresolved) reimbursable expense still counts in full', async () => {
+    await db.transactions.add({
+      type: 'expense', amount: 100, date: noon(2026, 4, 26), description: 'Group dinner',
+      categoryId: food, accountId: checking, fromAccountId: null, toAccountId: null,
+      reimbursable: 1, owedAmount: 60, paidBackNote: 'Marc', resolved: 0,
+    })
+    expect((await accountBalances()).get(checking)).toBe(4300 - 100)
+  })
+})
+
+describe('balance adjustments (isAdjustment)', () => {
+  it('moves the balance but is invisible to every statistic', async () => {
+    // A correction: the account was really 250 lower than greuro thought.
+    await db.transactions.add({
+      type: 'expense', amount: 250, date: noon(2026, 4, 27), description: 'Balance adjustment',
+      categoryId: null, accountId: checking, fromAccountId: null, toAccountId: null,
+      isAdjustment: 1,
+    })
+
+    const may = { from: noon(2026, 4, 1), to: noon(2026, 4, 31) }
+    // Balance + net worth DO move.
+    expect((await accountBalances()).get(checking)).toBe(4300 - 250)
+    expect(await netWorthAt()).toBe(4300 - 250 + 5500 - 1700)
+    // Nothing else notices it.
+    expect((await incomeExpenseTotals(may)).expense).toBe(1000)
+    expect((await cashFlow({ accountId: checking, ...may })).outflow).toBe(1800)
+    expect((await spendingByCategory(may)).some((r) => r.categoryId === null)).toBe(false)
+  })
+
+  it('a positive correction is an income row that still skips the stats', async () => {
+    await db.transactions.add({
+      type: 'income', amount: 90, date: noon(2026, 4, 28), description: 'Balance adjustment',
+      categoryId: null, accountId: checking, fromAccountId: null, toAccountId: null,
+      isAdjustment: 1,
+    })
+    const may = { from: noon(2026, 4, 1), to: noon(2026, 4, 31) }
+    expect((await accountBalances()).get(checking)).toBe(4300 + 90)
+    expect((await incomeExpenseTotals(may)).income).toBe(3000)
+    expect((await cashFlow({ accountId: checking, ...may })).inflow).toBe(3000)
+  })
+})
+
 describe('balance-only (excludeFromStats) categories', () => {
   it('adjustment expense hits balances but is invisible to stats', async () => {
     // A quarterly correction: -400 on checking, in an excluded category.

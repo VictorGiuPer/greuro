@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { X, Trash2 } from 'lucide-react'
+import { X, Trash2, ChevronDown } from 'lucide-react'
 import {
   addTransaction,
   updateTransaction,
@@ -9,11 +9,18 @@ import {
   getDescriptionSuggestions,
   accountUsage,
 } from '../db'
-import { toDateInputValue, fromDateInputValue, toAmountInputValue } from '../lib/format'
+import {
+  toDateInputValue,
+  fromDateInputValue,
+  toAmountInputValue,
+  parseAmountInput,
+  formatAmount,
+} from '../lib/format'
 import { evaluate } from '../lib/calc'
 import SegmentedPill from './SegmentedPill'
 import Sheet from './ui/Sheet'
 import Select from './ui/Select'
+import Collapse from './ui/Collapse'
 import AmountCalcInput from './AmountCalcInput'
 import AccountForm from './settings/AccountForm'
 import CategoryForm from './settings/CategoryForm'
@@ -35,6 +42,10 @@ function emptyForm() {
     fromAccountId: '',
     toAccountId: '',
     tripId: '',
+    reimbursable: false,
+    owedAmount: '',
+    paidBackNote: '',
+    resolved: false,
   }
 }
 
@@ -50,6 +61,10 @@ function formFromTx(tx) {
     fromAccountId: tx.fromAccountId ?? '',
     toAccountId: tx.toAccountId ?? '',
     tripId: tx.tripId ?? '',
+    reimbursable: Boolean(tx.reimbursable),
+    owedAmount: tx.owedAmount ? toAmountInputValue(tx.owedAmount) : '',
+    paidBackNote: tx.paidBackNote || '',
+    resolved: Boolean(tx.resolved),
   }
 }
 
@@ -72,13 +87,18 @@ export default function TransactionForm({
   const [mini, setMini] = useState(null)
   // Autofill memory: recent distinct descriptions matching what's typed.
   const [suggestions, setSuggestions] = useState([])
+  // The "Optional" disclosure (trip + paid-back) — collapsed unless in use.
+  const [optionalOpen, setOptionalOpen] = useState(false)
   // Description value we last prefilled/loaded — suppresses re-suggesting it.
   const appliedDescRef = useRef('')
 
   const isEdit = Boolean(editingTx)
+  // Balance corrections stay editable/deletable, but skip the category rule.
+  const isAdjustment = Boolean(editingTx?.isAdjustment)
 
-  // (Re)initialize whenever the sheet opens or the edited row changes, and
-  // focus the amount field so quick-add is type-ready immediately.
+  // (Re)initialize whenever the sheet opens or the edited row changes. The
+  // keyboard should only ever appear from an active tap on a field — never
+  // automatically — so this deliberately does NOT focus anything.
   useEffect(() => {
     if (!open) return
     const base = editingTx ? formFromTx(editingTx) : emptyForm()
@@ -90,9 +110,9 @@ export default function TransactionForm({
     setConfirmDelete(false)
     setMini(null)
     setSuggestions([])
+    // Auto-expand when the row already uses an optional tag, so it's visible.
+    setOptionalOpen(Boolean(base.tripId) || Boolean(base.reimbursable))
     appliedDescRef.current = editingTx?.description || ''
-    const t = setTimeout(() => document.getElementById('tx-amount')?.focus(), 80)
-    return () => clearTimeout(t)
   }, [open, editingTx, prefillAmount])
 
   // Debounced description-memory lookup: only while typing something new
@@ -138,6 +158,32 @@ export default function TransactionForm({
     return categories.filter((c) => c.kind === form.type)
   }, [categories, form.type])
 
+  // Amount + owed parsed once and reused by the summary, live preview and
+  // the Resolved badge. Owed = the total you expect back, a fixed figure you
+  // set (not a running "paid so far" tally) — netting only happens once
+  // `resolved` is explicitly toggled.
+  const amountValue = useMemo(() => evaluate(form.amount).value ?? 0, [form.amount])
+  const owedValue = useMemo(() => parseAmountInput(form.owedAmount) || 0, [form.owedAmount])
+  const netPreview = form.resolved ? Math.max(0, amountValue - owedValue) : amountValue
+
+  function toggleResolved() {
+    set({ resolved: !form.resolved })
+  }
+
+  // What the collapsed "Optional" header advertises, so a set tag is never
+  // hidden behind a closed disclosure.
+  const optionalSummary = useMemo(() => {
+    const parts = []
+    if (form.tripId) {
+      const trip = trips.find((t) => t.id === Number(form.tripId))
+      if (trip) parts.push(trip.name)
+    }
+    if (form.reimbursable) {
+      parts.push(form.resolved ? 'Resolved' : `${formatAmount(owedValue)} owed`)
+    }
+    return parts.join(' · ')
+  }, [form.tripId, form.reimbursable, form.resolved, owedValue, trips])
+
   // Trips offered in the (optional) trip tag: active ones + the currently
   // tagged trip even if archived (edit mode). Hidden entirely when empty.
   const tripChoices = useMemo(() => {
@@ -177,7 +223,13 @@ export default function TransactionForm({
         return '"From" and "To" must be different accounts.'
     } else {
       if (!form.accountId) return 'Choose an account.'
-      if (!form.categoryId) return 'Choose a category.'
+      // Balance adjustments carry no category by design — don't demand one.
+      if (!form.categoryId && !isAdjustment) return 'Choose a category.'
+    }
+    if (form.type === 'expense' && form.reimbursable && form.owedAmount.trim()) {
+      const owed = parseAmountInput(form.owedAmount)
+      if (!Number.isFinite(owed) || owed < 0) return 'Enter a valid amount to be paid back.'
+      if (owed > res.value) return 'Amount to be paid back can’t exceed the total.'
     }
     return ''
   }
@@ -200,6 +252,13 @@ export default function TransactionForm({
       fromAccountId: form.type === 'transfer' ? Number(form.fromAccountId) : null,
       toAccountId: form.type === 'transfer' ? Number(form.toAccountId) : null,
       tripId: form.type === 'transfer' || !form.tripId ? null : Number(form.tripId),
+      // Paid-back tag (normalize() drops these for non-expenses).
+      reimbursable: form.type === 'expense' && form.reimbursable ? 1 : 0,
+      owedAmount: form.owedAmount.trim() ? parseAmountInput(form.owedAmount) || 0 : 0,
+      paidBackNote: form.paidBackNote,
+      resolved: form.reimbursable && form.resolved ? 1 : 0,
+      // Preserve the adjustment flag across edits.
+      isAdjustment: isAdjustment ? 1 : 0,
     }
     try {
       if (isEdit) await updateTransaction(editingTx.id, payload)
@@ -407,31 +466,152 @@ export default function TransactionForm({
                 </div>
               )}
 
-              {/* Trip tag (optional; only shown once you have trips) */}
-              {form.type !== 'transfer' && tripChoices.length > 0 && (
-                <div className="mb-4">
-                  <label htmlFor="tx-trip" className="mb-1.5 block text-sm text-txt-secondary">
-                    Trip <span className="text-txt-muted">(optional)</span>
-                  </label>
-                  <select
-                    id="tx-trip"
-                    value={form.tripId === '' || form.tripId == null ? '' : String(form.tripId)}
-                    onChange={(e) => set({ tripId: e.target.value })}
-                    className="w-full appearance-none rounded-2xl border border-hairline bg-elevated px-4 py-3 text-txt-primary focus:outline-none focus:ring-1 focus:ring-accent/50"
-                    style={{
-                      backgroundImage:
-                        "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239BA1AC' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>\")",
-                      backgroundRepeat: 'no-repeat',
-                      backgroundPosition: 'right 14px center',
-                    }}
+              {/* Optional tags (trip + paid back) — collapsed unless in use */}
+              {form.type === 'expense' && (
+                <div className="mb-4 overflow-hidden rounded-2xl border border-hairline bg-elevated">
+                  <button
+                    type="button"
+                    onClick={() => setOptionalOpen((v) => !v)}
+                    aria-expanded={optionalOpen}
+                    className="flex w-full items-center justify-between px-4 py-3 text-left"
                   >
-                    <option value="">No trip</option>
-                    {tripChoices.map((t) => (
-                      <option key={t.id} value={String(t.id)}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </select>
+                    <span className="min-w-0">
+                      <span className="block text-sm text-txt-secondary">Optional</span>
+                      {optionalSummary && (
+                        <span className="block truncate text-xs text-accent">
+                          {optionalSummary}
+                        </span>
+                      )}
+                    </span>
+                    <ChevronDown
+                      size={18}
+                      className={`shrink-0 text-txt-muted transition-transform ${
+                        optionalOpen ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </button>
+
+                  <Collapse open={optionalOpen}>
+                    <div className="border-t border-hairline px-4 pb-4 pt-3">
+                      {/* Trip tag (only once you have trips) */}
+                      {tripChoices.length > 0 && (
+                        <div className="mb-4">
+                          <label
+                            htmlFor="tx-trip"
+                            className="mb-1.5 block text-sm text-txt-secondary"
+                          >
+                            Trip
+                          </label>
+                          <select
+                            id="tx-trip"
+                            value={
+                              form.tripId === '' || form.tripId == null ? '' : String(form.tripId)
+                            }
+                            onChange={(e) => set({ tripId: e.target.value })}
+                            className="w-full appearance-none rounded-2xl border border-hairline bg-card px-4 py-3 text-txt-primary focus:outline-none focus:ring-1 focus:ring-accent/50"
+                            style={{
+                              backgroundImage:
+                                "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239BA1AC' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>\")",
+                              backgroundRepeat: 'no-repeat',
+                              backgroundPosition: 'right 14px center',
+                            }}
+                          >
+                            <option value="">No trip</option>
+                            {tripChoices.map((t) => (
+                              <option key={t.id} value={String(t.id)}>
+                                {t.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Needs to be paid back */}
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={form.reimbursable}
+                        onClick={() => set({ reimbursable: !form.reimbursable })}
+                        className="flex w-full items-center justify-between rounded-2xl border border-hairline bg-card px-4 py-3"
+                      >
+                        <span className="text-left text-sm text-txt-primary">
+                          Needs to be paid back
+                        </span>
+                        <span
+                          className={`ml-3 flex h-7 w-12 shrink-0 items-center rounded-full p-1 transition-colors ${
+                            form.reimbursable ? 'bg-accent' : 'bg-white/10'
+                          }`}
+                        >
+                          <span
+                            className={`h-5 w-5 rounded-full bg-white transition-transform ${
+                              form.reimbursable ? 'translate-x-5' : ''
+                            }`}
+                          />
+                        </span>
+                      </button>
+
+                      <Collapse open={form.reimbursable}>
+                        <div className="mt-3 space-y-3">
+                          <div>
+                            <label
+                              htmlFor="tx-owed-amount"
+                              className="mb-1.5 block text-sm text-txt-secondary"
+                            >
+                              To be paid back
+                            </label>
+                            <div className="flex items-center gap-2">
+                              <div className="flex min-w-0 flex-1 items-center rounded-2xl border border-hairline bg-card px-4">
+                                <input
+                                  id="tx-owed-amount"
+                                  type="text"
+                                  inputMode="decimal"
+                                  autoComplete="off"
+                                  value={form.owedAmount}
+                                  onChange={(e) => set({ owedAmount: e.target.value })}
+                                  placeholder="0,00"
+                                  className="w-full min-w-0 bg-transparent py-3 text-txt-primary placeholder:text-txt-muted focus:outline-none"
+                                />
+                                <span className="text-lg text-txt-muted">€</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={toggleResolved}
+                                aria-pressed={form.resolved}
+                                className={`shrink-0 rounded-2xl border px-3.5 py-3 text-sm font-semibold transition-colors ${
+                                  form.resolved
+                                    ? 'border-accent/60 bg-accent/15 text-accent'
+                                    : 'border-hairline bg-card text-txt-secondary hover:text-txt-primary'
+                                }`}
+                              >
+                                Resolved
+                              </button>
+                            </div>
+                          </div>
+                          <div>
+                            <label
+                              htmlFor="tx-paidback-note"
+                              className="mb-1.5 block text-sm text-txt-secondary"
+                            >
+                              Who / note
+                            </label>
+                            <input
+                              id="tx-paidback-note"
+                              type="text"
+                              value={form.paidBackNote}
+                              onChange={(e) => set({ paidBackNote: e.target.value })}
+                              placeholder="e.g. Marc, work expenses"
+                              className="w-full rounded-2xl border border-hairline bg-card px-4 py-3 text-txt-primary placeholder:text-txt-muted focus:outline-none focus:ring-1 focus:ring-accent/50"
+                            />
+                          </div>
+                          <p className="text-xs leading-snug text-txt-muted">
+                            {form.resolved
+                              ? `Resolved — counts as ${formatAmount(netPreview)} now that ${formatAmount(owedValue)} came back.`
+                              : `Counts as the full ${formatAmount(amountValue)} until you mark it resolved.`}
+                          </p>
+                        </div>
+                      </Collapse>
+                    </div>
+                  </Collapse>
                 </div>
               )}
 

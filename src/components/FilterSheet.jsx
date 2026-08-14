@@ -10,6 +10,7 @@ export const EMPTY_FILTERS = {
   categoryIds: [],
   accountIds: [],
   tripIds: [],
+  owedOnly: false,
   dateFrom: null,
   dateTo: null,
 }
@@ -21,6 +22,7 @@ export function countActiveFilters(f) {
   if (f.categoryIds.length) n += 1
   if (f.accountIds.length) n += 1
   if (f.tripIds?.length) n += 1
+  if (f.owedOnly) n += 1
   if (f.dateFrom != null || f.dateTo != null) n += 1
   return n
 }
@@ -151,6 +153,17 @@ export default function FilterSheet({ open, onClose, categories, accounts, trips
           </div>
         </>
       )}
+
+      {/* Money still owed back to you */}
+      <FieldLabel>Paid back</FieldLabel>
+      <div className="mb-5">
+        <TogglePill
+          active={Boolean(draft.owedOnly)}
+          onClick={() => set({ owedOnly: !draft.owedOnly })}
+        >
+          Owed to me
+        </TogglePill>
+      </div>
 
       {/* Date range */}
       <FieldLabel>Date range</FieldLabel>

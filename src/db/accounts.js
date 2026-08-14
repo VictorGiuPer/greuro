@@ -1,4 +1,7 @@
 import { db } from './db'
+import { accountBalances } from './derive'
+import { addTransaction } from './transactions'
+import { todayNoon } from '../lib/dates'
 
 /** Account reads + writes, with a referential-integrity guard on delete. */
 
@@ -50,6 +53,40 @@ export async function updateAccount(id, patch) {
   if (patch.expectedAnnualReturn != null)
     clean.expectedAnnualReturn = Number(patch.expectedAnnualReturn) || 0
   return db.accounts.update(id, clean)
+}
+
+/** Description used for the entries created by setAccountBalance(). */
+export const BALANCE_ADJUSTMENT_LABEL = 'Balance adjustment'
+
+/**
+ * Correct an account's CURRENT balance. Rather than rewriting history, this
+ * books the difference as a visible "Balance adjustment" transaction flagged
+ * `isAdjustment` — it moves the balance and net worth, but is excluded from
+ * every income / expense / cash-flow statistic (see derive.js), so a quarterly
+ * correction never looks like a spending spike.
+ *
+ * @returns {Promise<{ changed: boolean, delta?: number, id?: number }>}
+ */
+export async function setAccountBalance(accountId, newBalance) {
+  const target = Number(newBalance)
+  if (!Number.isFinite(target)) return { changed: false }
+
+  const balances = await accountBalances()
+  const current = balances.get(accountId) ?? 0
+  const delta = target - current
+  // Ignore sub-cent drift so a no-op save never litters the ledger.
+  if (Math.abs(delta) < 0.005) return { changed: false }
+
+  const id = await addTransaction({
+    type: delta > 0 ? 'income' : 'expense',
+    amount: Math.abs(delta),
+    date: todayNoon(),
+    description: BALANCE_ADJUSTMENT_LABEL,
+    categoryId: null,
+    accountId,
+    isAdjustment: 1,
+  })
+  return { changed: true, delta, id }
 }
 
 /**

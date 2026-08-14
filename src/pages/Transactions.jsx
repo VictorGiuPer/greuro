@@ -32,6 +32,9 @@ export default function Transactions() {
     setAccounts(accs)
     setCategories(cats)
     setTrips(tps)
+    // Settings edits can also write transactions (e.g. a balance correction
+    // books an adjustment), so reload the list rather than showing stale rows.
+    setRefreshToken((n) => n + 1)
   }, [])
 
   // Load reference data once.
@@ -133,6 +136,13 @@ export default function Transactions() {
         label: tripsById.get(id)?.name ?? 'Trip',
         remove: () =>
           setFilters((f) => ({ ...f, tripIds: (f.tripIds ?? []).filter((x) => x !== id) })),
+      })
+    }
+    if (filters.owedOnly) {
+      chips.push({
+        key: 'owed',
+        label: 'Owed to me',
+        remove: () => setFilters((f) => ({ ...f, owedOnly: false })),
       })
     }
     if (filters.dateFrom != null || filters.dateTo != null) {

@@ -1,5 +1,6 @@
 import CategoryIcon from './CategoryIcon'
-import { signedAmount } from '../lib/format'
+import { signedAmount, formatAmount } from '../lib/format'
+import { effectiveAmount, outstandingAmount, isResolved } from '../lib/txAmount'
 
 const AMOUNT_CLASS = {
   expense: 'text-expense',
@@ -9,11 +10,14 @@ const AMOUNT_CLASS = {
 
 /**
  * A single transaction row: icon tile, two-line text, right-aligned amount.
+ * The amount shown is the EFFECTIVE one (net of anything paid back), which is
+ * also what every balance and statistic uses.
  *
  * @param categoriesById / accountsById  lookup maps for resolving labels.
  */
 export default function TransactionRow({ tx, categoriesById, accountsById, onClick }) {
   const isTransfer = tx.type === 'transfer'
+  const isAdjustment = Boolean(tx.isAdjustment)
   const category = isTransfer ? null : categoriesById.get(tx.categoryId)
 
   let title = tx.description
@@ -29,9 +33,20 @@ export default function TransactionRow({ tx, categoriesById, accountsById, onCli
     subtitle = 'Transfer'
     iconName = 'ArrowLeftRight'
     iconColor = '#9BA1AC'
+  } else if (isAdjustment) {
+    // A balance correction: real for the balance, invisible to statistics.
+    // The title already says "Balance adjustment", so name the account here.
+    subtitle = accountsById.get(tx.accountId)?.name ?? 'Balance adjustment'
+    iconName = 'Scale'
+    iconColor = '#9BA1AC'
   } else {
     subtitle = category?.name ?? 'Uncategorized'
+    const owedSoFar = outstandingAmount(tx)
+    if (owedSoFar > 0) subtitle += ` · ${formatAmount(owedSoFar)} owed`
   }
+
+  const owed = outstandingAmount(tx)
+  const resolved = isResolved(tx)
 
   return (
     <button
@@ -41,11 +56,27 @@ export default function TransactionRow({ tx, categoriesById, accountsById, onCli
     >
       <CategoryIcon name={iconName} color={iconColor} />
       <div className="min-w-0 flex-1">
-        <div className="text-txt-primary font-medium truncate">{title}</div>
+        <div className="flex items-center gap-1.5">
+          <span className="truncate font-medium text-txt-primary">{title}</span>
+          {owed > 0 && (
+            <span className="shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-300">
+              Owed
+            </span>
+          )}
+          {resolved && (
+            <span className="shrink-0 rounded-full bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-accent">
+              Resolved
+            </span>
+          )}
+        </div>
         <div className="text-txt-secondary text-sm truncate">{subtitle}</div>
       </div>
-      <div className={`font-semibold tabular-nums shrink-0 ${AMOUNT_CLASS[tx.type]}`}>
-        {signedAmount(tx.type, tx.amount)}
+      <div
+        className={`font-semibold tabular-nums shrink-0 ${
+          isAdjustment ? 'text-txt-secondary' : AMOUNT_CLASS[tx.type]
+        }`}
+      >
+        {signedAmount(tx.type, effectiveAmount(tx))}
       </div>
     </button>
   )

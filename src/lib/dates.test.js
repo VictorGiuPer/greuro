@@ -6,6 +6,8 @@ import {
   customRange,
   addMonthsClamped,
   monthRange,
+  monthKey,
+  previousMonthKey,
   addDays,
   daysUntil,
   startOfDayMs,
@@ -90,5 +92,20 @@ describe('misc', () => {
     const today = startOfDayMs(Date.now())
     expect(daysUntil(addDays(today, 3))).toBe(3)
     expect(daysUntil(addDays(today, -2))).toBe(-2)
+  })
+})
+
+describe('monthKey / previousMonthKey', () => {
+  it('formats a zero-padded YYYY-MM', () => {
+    expect(monthKey(2026, 0)).toBe('2026-01')
+    expect(monthKey(2026, 10)).toBe('2026-11')
+  })
+
+  it('previousMonthKey steps back one calendar month', () => {
+    expect(previousMonthKey(noon(2026, 7, 14))).toBe('2026-07') // mid-August -> July
+  })
+
+  it('previousMonthKey rolls back across a year boundary', () => {
+    expect(previousMonthKey(noon(2026, 0, 5))).toBe('2025-12') // January -> prior December
   })
 })

@@ -1,5 +1,6 @@
 import { db } from './db'
 import { monthRange } from '../lib/dates'
+import { effectiveAmount } from '../lib/txAmount'
 
 /**
  * Derivation layer — every dashboard/report number is computed from
@@ -26,7 +27,8 @@ function startingValue(account) {
 }
 
 function applyTx(balances, t) {
-  const amt = Number(t.amount) || 0
+  // Net of any reimbursement — the money that came back really did return.
+  const amt = effectiveAmount(t)
   if (t.type === 'expense') {
     if (balances.has(t.accountId)) balances.set(t.accountId, balances.get(t.accountId) - amt)
   } else if (t.type === 'income') {
@@ -78,6 +80,16 @@ async function excludedCategoryIds() {
 }
 
 /**
+ * True when a transaction must not appear in any income / expense / cash-flow
+ * statistic: an explicit balance adjustment, or a "balance only" category.
+ * Balances and net worth deliberately still count these.
+ */
+function isStatExcluded(t, excludedCats) {
+  if (t.isAdjustment) return true
+  return (t.type === 'income' || t.type === 'expense') && excludedCats.has(t.categoryId)
+}
+
+/**
  * Cash flow for ONE account over a period — transfers COUNT (this card shows
  * the account's health, so money moving in/out matters regardless of type).
  * @returns {{ inflow: number, outflow: number, net: number }}
@@ -87,9 +99,9 @@ export async function cashFlow({ accountId, from, to }) {
   let inflow = 0
   let outflow = 0
   for (const t of txs) {
-    const amt = Number(t.amount) || 0
-    // Balance-only categories (e.g. quarterly adjustments) don't count as flow.
-    if ((t.type === 'income' || t.type === 'expense') && excluded.has(t.categoryId)) continue
+    // Balance adjustments / balance-only categories don't count as flow.
+    if (isStatExcluded(t, excluded)) continue
+    const amt = effectiveAmount(t)
     if (t.type === 'income' && t.accountId === accountId) inflow += amt
     else if (t.type === 'expense' && t.accountId === accountId) outflow += amt
     else if (t.type === 'transfer') {
@@ -110,9 +122,9 @@ export async function spendingByCategory({ from, to }) {
   const totals = new Map()
   for (const t of txs) {
     if (t.type !== 'expense') continue
-    if (excluded.has(t.categoryId)) continue
+    if (isStatExcluded(t, excluded)) continue
     const key = t.categoryId ?? null
-    totals.set(key, (totals.get(key) || 0) + (Number(t.amount) || 0))
+    totals.set(key, (totals.get(key) || 0) + effectiveAmount(t))
   }
   return [...totals.entries()]
     .map(([categoryId, total]) => ({ categoryId, total }))
@@ -128,8 +140,8 @@ export async function incomeExpenseTotals({ from, to }) {
   let income = 0
   let expense = 0
   for (const t of txs) {
-    if (excluded.has(t.categoryId)) continue
-    const amt = Number(t.amount) || 0
+    if (isStatExcluded(t, excluded)) continue
+    const amt = effectiveAmount(t)
     if (t.type === 'income') income += amt
     else if (t.type === 'expense') expense += amt
   }

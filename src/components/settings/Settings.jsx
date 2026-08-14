@@ -9,7 +9,6 @@ import {
   Sprout,
   Trash2,
   Plane,
-  Smartphone,
 } from 'lucide-react'
 import {
   addAccount,
@@ -23,6 +22,8 @@ import {
   setSetting,
   seedIfEmpty,
   accountUsage,
+  accountBalances,
+  setAccountBalance,
   getTrips,
 } from '../../db'
 import { wipeAllData } from '../../db/maintenance'
@@ -36,7 +37,6 @@ import CategoryForm from './CategoryForm'
 import ImportJson from './ImportJson'
 import BlueCoinsImport from './BlueCoinsImport'
 import TripForm from '../TripForm'
-import AutofillGuide from './AutofillGuide'
 
 /**
  * Full-screen Settings overlay for managing accounts and categories. Reads the
@@ -57,12 +57,13 @@ export default function Settings({ open, onClose, accounts, categories, onChange
   const [busy, setBusy] = useState(false)
   const [lastBackupAt, setLastBackupAt] = useState(null)
   const [mainAccountId, setMainAccountId] = useState(null)
+  // Derived current balances (accountId -> signed balance) for the list + form.
+  const [balances, setBalances] = useState(null)
   // Trips
   const [tripList, setTripList] = useState([])
   const [tripFormOpen, setTripFormOpen] = useState(false)
   const [editingTrip, setEditingTrip] = useState(null)
   // Android auto-fill guide
-  const [guideOpen, setGuideOpen] = useState(false)
 
   // Reset + (re)load preferences whenever the overlay is (re)opened.
   useEffect(() => {
@@ -73,8 +74,8 @@ export default function Settings({ open, onClose, accounts, categories, onChange
     setPrefsNote('')
     setWipeText('')
     setTripFormOpen(false)
-    setGuideOpen(false)
     getTrips().then(setTripList)
+    accountBalances().then(setBalances)
     getSettings().then((s) => {
       setLastBackupAt(s.lastBackupAt)
       setMainAccountId(s.mainAccountId)
@@ -163,6 +164,12 @@ export default function Settings({ open, onClose, accounts, categories, onChange
   async function submitAccount(data) {
     const id = editor.item ? editor.item.id : await addAccount(data)
     if (editor.item) await updateAccount(editor.item.id, data)
+    // Correct the balance AFTER the field save, so a starting-balance edit is
+    // already reflected when the adjustment delta is computed.
+    if (data.currentBalance !== undefined) {
+      await setAccountBalance(id, data.currentBalance)
+      setBalances(await accountBalances())
+    }
     // Persist the "main account" tag (a single-value setting).
     if (data.isMain === true) {
       await setSetting('mainAccountId', id)
@@ -236,6 +243,9 @@ export default function Settings({ open, onClose, accounts, categories, onChange
               onCancel={() => setEditor(null)}
               onDelete={editor.item ? onDeleteAccount : undefined}
               isMain={editor.item ? mainAccountId === editor.item.id : false}
+              currentBalance={
+                editor.item && balances ? (balances.get(editor.item.id) ?? 0) : undefined
+              }
             />
           ) : (
             <CategoryForm
@@ -276,7 +286,12 @@ export default function Settings({ open, onClose, accounts, categories, onChange
                           )}
                         </div>
                         <div className="text-sm text-txt-secondary">
-                          <span className="capitalize">{a.type}</span> · {formatAmount(a.startingBalance)}
+                          <span className="capitalize">{a.type}</span>
+                          {' · '}
+                          {/* Live derived balance, not the starting figure. */}
+                          <span className="tabular-nums text-txt-primary">
+                            {balances ? formatAmount(balances.get(a.id) ?? 0) : '—'}
+                          </span>
                           {' · '}
                           {a.expectedAnnualReturn}% return
                         </div>
@@ -469,19 +484,6 @@ export default function Settings({ open, onClose, accounts, categories, onChange
               </div>
             </section>
 
-            {/* Auto-fill from notifications (Android) */}
-            <section className="mb-8">
-              <h2 className="mb-3 text-base font-semibold text-txt-primary">Automation</h2>
-              <div className="overflow-hidden rounded-card border border-hairline bg-card">
-                <DataRow
-                  icon={Smartphone}
-                  title="Auto-fill from notifications (Android)"
-                  subtitle="Prefill the amount from a Google Pay notification via Tasker"
-                  onClick={() => setGuideOpen(true)}
-                />
-              </div>
-            </section>
-
             {/* About */}
             <section className="mb-8">
               <h2 className="mb-3 text-base font-semibold text-txt-primary">About</h2>
@@ -519,7 +521,6 @@ export default function Settings({ open, onClose, accounts, categories, onChange
         onSaved={handleTripSaved}
         editingTrip={editingTrip}
       />
-      <AutofillGuide open={guideOpen} onClose={() => setGuideOpen(false)} />
     </div>
   )
 }

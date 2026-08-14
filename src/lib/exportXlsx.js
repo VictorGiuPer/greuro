@@ -1,6 +1,7 @@
 import { db } from '../db/db'
 import { accountBalances } from '../db/derive'
 import { formatDate } from './format'
+import { effectiveAmount } from './txAmount'
 
 /**
  * Excel export — fully in-browser via SheetJS (dynamically imported so the
@@ -26,9 +27,13 @@ function applyEuroFormat(XLSX, ws, cols, rowCount) {
   }
 }
 
-/** Signed amount per the money convention (transfer shown negative-neutral). */
+/**
+ * Signed amount per the money convention (transfer shown negative-neutral),
+ * net of anything paid back — the same figure the app's stats use.
+ */
 function signedValue(t) {
-  return t.type === 'income' ? t.amount : -t.amount
+  const amount = effectiveAmount(t)
+  return t.type === 'income' ? amount : -amount
 }
 
 function txRow(t, categoriesById, accountsById) {
@@ -92,11 +97,11 @@ export async function exportAllWorkbook() {
   // 2. Monthly summary (one pass over all transactions).
   const months = new Map()
   for (const t of txs) {
-    if (t.type === 'transfer') continue
+    if (t.type === 'transfer' || t.isAdjustment) continue
     const key = monthKey(t.date)
     const m = months.get(key) ?? { income: 0, expense: 0 }
-    if (t.type === 'income') m.income += t.amount
-    else m.expense += t.amount
+    if (t.type === 'income') m.income += effectiveAmount(t)
+    else m.expense += effectiveAmount(t)
     months.set(key, m)
   }
   const monthRows = [...months.entries()]
@@ -113,9 +118,9 @@ export async function exportAllWorkbook() {
   // 3. By category (all time).
   const catTotals = new Map()
   for (const t of txs) {
-    if (t.type === 'transfer') continue
+    if (t.type === 'transfer' || t.isAdjustment) continue
     const entry = catTotals.get(t.categoryId) ?? { total: 0, count: 0 }
-    entry.total += t.amount
+    entry.total += effectiveAmount(t)
     entry.count += 1
     catTotals.set(t.categoryId, entry)
   }
@@ -136,11 +141,13 @@ export async function exportAllWorkbook() {
   // 4. By account: lifetime in/out (transfers count) + current balance.
   const flows = new Map(accounts.map((a) => [a.id, { in: 0, out: 0 }]))
   for (const t of txs) {
-    if (t.type === 'income') flows.get(t.accountId) && (flows.get(t.accountId).in += t.amount)
-    else if (t.type === 'expense') flows.get(t.accountId) && (flows.get(t.accountId).out += t.amount)
+    if (t.isAdjustment) continue // corrections aren't cash flow
+    const amt = effectiveAmount(t)
+    if (t.type === 'income') flows.get(t.accountId) && (flows.get(t.accountId).in += amt)
+    else if (t.type === 'expense') flows.get(t.accountId) && (flows.get(t.accountId).out += amt)
     else {
-      flows.get(t.fromAccountId) && (flows.get(t.fromAccountId).out += t.amount)
-      flows.get(t.toAccountId) && (flows.get(t.toAccountId).in += t.amount)
+      flows.get(t.fromAccountId) && (flows.get(t.fromAccountId).out += amt)
+      flows.get(t.toAccountId) && (flows.get(t.toAccountId).in += amt)
     }
   }
   const balances = await accountBalances()

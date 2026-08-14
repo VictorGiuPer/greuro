@@ -13,13 +13,26 @@ import { parseAmountInput, toAmountInputValue } from '../../lib/format'
  * @param onCancel  () => void
  * @param onDelete  async () => ({ ok } | { ok:false, count })  (edit only)
  * @param isMain    when defined, shows the "Main account" switch (Settings only)
+ * @param currentBalance  derived balance (edit only) — editing it books a
+ *                        "Balance adjustment" transaction instead of rewriting
+ *                        history. Only sent back when actually changed.
  */
-export default function AccountForm({ account, onSubmit, onCancel, onDelete, isMain }) {
+export default function AccountForm({
+  account,
+  onSubmit,
+  onCancel,
+  onDelete,
+  isMain,
+  currentBalance,
+}) {
   const isEdit = Boolean(account)
   const [name, setName] = useState(account?.name ?? '')
   const [type, setType] = useState(account?.type ?? 'asset')
   const [usage, setUsage] = useState(account?.usage === 'investment' ? 'investment' : 'active')
   const [main, setMain] = useState(Boolean(isMain))
+  const showCurrent = isEdit && currentBalance != null
+  const initialCurrent = showCurrent ? toAmountInputValue(currentBalance) : ''
+  const [current, setCurrent] = useState(initialCurrent)
   const [startingBalance, setStartingBalance] = useState(
     account ? toAmountInputValue(account.startingBalance) : '',
   )
@@ -40,6 +53,18 @@ export default function AccountForm({ account, onSubmit, onCancel, onDelete, isM
       setError('Enter an account name.')
       return
     }
+    // Only treat the current balance as a correction when it was actually
+    // edited — otherwise a starting-balance change would be cancelled out by
+    // an adjustment that forces the old current balance back.
+    const currentDirty = showCurrent && current.trim() !== initialCurrent.trim()
+    let currentValue
+    if (currentDirty) {
+      currentValue = parseAmountInput(current)
+      if (!Number.isFinite(currentValue)) {
+        setError('Enter a valid current balance.')
+        return
+      }
+    }
     setBusy(true)
     try {
       await onSubmit({
@@ -49,6 +74,7 @@ export default function AccountForm({ account, onSubmit, onCancel, onDelete, isM
         isMain: showMain ? main : undefined,
         startingBalance: parseAmountInput(startingBalance) || 0,
         expectedAnnualReturn: parseAmountInput(expectedAnnualReturn) || 0,
+        currentBalance: currentDirty ? currentValue : undefined,
       })
     } finally {
       setBusy(false)
@@ -142,6 +168,31 @@ export default function AccountForm({ account, onSubmit, onCancel, onDelete, isM
         </button>
       )}
 
+      {showCurrent && (
+        <div>
+          <label htmlFor="acct-current" className="mb-1.5 block text-sm text-txt-secondary">
+            Current balance
+          </label>
+          <div className="flex items-center rounded-2xl border border-hairline bg-elevated px-4">
+            <input
+              id="acct-current"
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
+              value={current}
+              onChange={(e) => setCurrent(e.target.value)}
+              placeholder="0,00"
+              className="w-full bg-transparent py-3 text-txt-primary placeholder:text-txt-muted focus:outline-none"
+            />
+            <span className="text-lg text-txt-muted">€</span>
+          </div>
+          <p className="mt-1.5 text-xs text-txt-muted">
+            Updates itself as you log transactions. Correcting it books a “Balance adjustment”
+            that moves the balance but never counts as income or spending.
+          </p>
+        </div>
+      )}
+
       <div>
         <label className="mb-1.5 block text-sm text-txt-secondary">Starting balance</label>
         <div className="flex items-center rounded-2xl border border-hairline bg-elevated px-4">
@@ -156,6 +207,9 @@ export default function AccountForm({ account, onSubmit, onCancel, onDelete, isM
           />
           <span className="text-lg text-txt-muted">€</span>
         </div>
+        {showCurrent && (
+          <p className="mt-1.5 text-xs text-txt-muted">The balance before any transactions.</p>
+        )}
       </div>
 
       <div>
