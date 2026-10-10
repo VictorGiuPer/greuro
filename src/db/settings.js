@@ -24,6 +24,8 @@ export const SETTINGS_DEFAULTS = {
   onboarded: false,
   // Data management.
   lastBackupAt: null,
+  // YYYY-MM of the month the monthly backup reminder was last shown.
+  lastBackupReminderMonth: null,
   // Dashboard: which account the Cash Flow card shows (falls back to main).
   cashFlowAccountId: null,
   // The everyday account the savings tracker + cash-flow default use.

@@ -18,6 +18,7 @@ import {
 } from '../db'
 import { periodRange, customRange, todayNoon, addDays, previousMonthKey } from '../lib/dates'
 import { formatDate } from '../lib/format'
+import { exportBackupFile } from '../db/backup'
 import PeriodPicker from '../components/dashboard/PeriodPicker'
 import SpendingDonut from '../components/dashboard/SpendingDonut'
 import SpendingFocus from '../components/dashboard/SpendingFocus'
@@ -33,6 +34,11 @@ import GoalForm from '../components/GoalForm'
 import AddSavingsSheet from '../components/AddSavingsSheet'
 import TripForm from '../components/TripForm'
 import Fab from '../components/ui/Fab'
+import BackupReminder from '../components/BackupReminder'
+
+function localMonthKey(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+}
 
 /**
  * Overview tab — everything derived live from transactions for the selected
@@ -46,6 +52,10 @@ export default function Dashboard({ prefillAmount, onPrefillConsumed }) {
   const [settings, setSettingsState] = useState(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [reportOpen, setReportOpen] = useState(false)
+  const [backupReminderOpen, setBackupReminderOpen] = useState(false)
+  const [backupReminderBusy, setBackupReminderBusy] = useState(false)
+  const [backupReminderError, setBackupReminderError] = useState('')
+  const [backupReminderDownloaded, setBackupReminderDownloaded] = useState(false)
   const [txFormOpen, setTxFormOpen] = useState(false)
   const [focusOpen, setFocusOpen] = useState(false)
   const [goalFormOpen, setGoalFormOpen] = useState(false)
@@ -102,6 +112,25 @@ export default function Dashboard({ prefillAmount, onPrefillConsumed }) {
   useEffect(() => {
     reloadMeta()
   }, [reloadMeta])
+
+  // Ask once per calendar month when there is account data and no JSON export
+  // has been made during the current month. Dismissing snoozes until next month.
+  useEffect(() => {
+    if (!settings || accounts.length === 0) return
+    const month = localMonthKey()
+    const backupMonth = settings.lastBackupAt
+      ? localMonthKey(new Date(settings.lastBackupAt))
+      : null
+    if (backupMonth === month || settings.lastBackupReminderMonth === month) return
+
+    setBackupReminderDownloaded(false)
+    setBackupReminderError('')
+    setBackupReminderOpen(true)
+    setSettingsState((current) => ({ ...current, lastBackupReminderMonth: month }))
+    void setSetting('lastBackupReminderMonth', month).catch((error) => {
+      console.error('Could not save monthly backup reminder state:', error)
+    })
+  }, [accounts.length, settings])
 
   // Keep the selected trip valid as the trip list changes (default = first).
   useEffect(() => {
@@ -236,6 +265,35 @@ export default function Dashboard({ prefillAmount, onPrefillConsumed }) {
     setTripFormOpen(false)
     await reloadMeta()
     setRefreshToken((n) => n + 1)
+  }
+
+  async function handleBackupReminderExport() {
+    setBackupReminderBusy(true)
+    setBackupReminderError('')
+    try {
+      await exportBackupFile({ recordExport: false })
+      setBackupReminderDownloaded(true)
+    } catch (error) {
+      setBackupReminderError(error?.message || 'The backup could not be created. Please try again.')
+    } finally {
+      setBackupReminderBusy(false)
+    }
+  }
+
+  async function handleBackupReminderConfirmSaved() {
+    setBackupReminderBusy(true)
+    setBackupReminderError('')
+    try {
+      const lastBackupAt = Date.now()
+      await setSetting('lastBackupAt', lastBackupAt)
+      setSettingsState((current) => ({ ...current, lastBackupAt }))
+      setBackupReminderOpen(false)
+      setBackupReminderDownloaded(false)
+    } catch (error) {
+      setBackupReminderError(error?.message || 'Could not record the backup confirmation.')
+    } finally {
+      setBackupReminderBusy(false)
+    }
   }
 
   const periodLabel =
@@ -392,6 +450,17 @@ export default function Dashboard({ prefillAmount, onPrefillConsumed }) {
         open={reportOpen}
         onClose={() => setReportOpen(false)}
         categoriesById={categoriesById}
+      />
+
+      <BackupReminder
+        open={backupReminderOpen}
+        lastBackupAt={settings?.lastBackupAt}
+        busy={backupReminderBusy}
+        error={backupReminderError}
+        downloaded={backupReminderDownloaded}
+        onBackup={handleBackupReminderExport}
+        onConfirmSaved={handleBackupReminderConfirmSaved}
+        onDismiss={() => setBackupReminderOpen(false)}
       />
 
       <Settings

@@ -39,7 +39,7 @@ export async function buildBackup() {
 }
 
 /** Build + download as a .json file, and remember the backup time. */
-export async function exportBackupFile() {
+export async function exportBackupFile({ recordExport = true } = {}) {
   const backup = await buildBackup()
   const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
@@ -48,7 +48,7 @@ export async function exportBackupFile() {
   a.download = `budget-backup-${new Date().toISOString().slice(0, 10)}.json`
   a.click()
   URL.revokeObjectURL(url)
-  await setSetting('lastBackupAt', Date.now())
+  if (recordExport) await setSetting('lastBackupAt', Date.now())
 }
 
 /**
