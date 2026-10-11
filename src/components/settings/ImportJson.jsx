@@ -5,15 +5,12 @@ import { formatDate } from '../../lib/format'
 
 /**
  * JSON backup restore flow: pick file → validated preview (counts, source
- * date) → choose merge or replace → apply. Replace requires a second tap.
- * No writes happen before the final confirm.
+ * date) → replace the signed-in user's cloud budget with the backup.
  */
 export default function ImportJson({ open, onClose, onImported }) {
   const [stage, setStage] = useState('pick') // pick | preview | done
   const [json, setJson] = useState(null)
   const [info, setInfo] = useState(null) // { counts, exportedAt }
-  const [mode, setMode] = useState('merge')
-  const [confirmReplace, setConfirmReplace] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState(null)
@@ -23,8 +20,6 @@ export default function ImportJson({ open, onClose, onImported }) {
     setStage('pick')
     setJson(null)
     setInfo(null)
-    setMode('merge')
-    setConfirmReplace(false)
     setError('')
     setResult(null)
   }, [open])
@@ -37,7 +32,7 @@ export default function ImportJson({ open, onClose, onImported }) {
     try {
       // Some mobile file providers add a UTF-8 BOM to otherwise valid JSON.
       // JSON.parse rejects that leading character, so remove it before parsing.
-      const text = (await file.text()).replace(/^\uFEFF/, '')
+      const text = (await readFileText(file)).replace(/^\uFEFF/, '')
       const parsed = JSON.parse(text)
       const valid = validateBackup(parsed)
       if (!valid.ok) {
@@ -53,17 +48,15 @@ export default function ImportJson({ open, onClose, onImported }) {
   }
 
   async function handleApply() {
-    if (mode === 'replace' && !confirmReplace) {
-      setConfirmReplace(true)
-      return
-    }
     setBusy(true)
     setError('')
     try {
-      const imported = await applyBackup(json, mode)
+      // Restore means restore: replace the cloud snapshot with the selected
+      // backup so existing data cannot silently prevent/alter the import.
+      const imported = await applyBackup(json, 'replace')
+      await onImported?.()
       setResult(imported)
       setStage('done')
-      await onImported?.()
     } catch (err) {
       setError(err.message || 'Import failed.')
     } finally {
@@ -99,12 +92,18 @@ export default function ImportJson({ open, onClose, onImported }) {
               Choose a <span className="text-txt-primary">budget-backup-….json</span> file. After
               you review it, the data will be saved to your signed-in Supabase account.
             </p>
-            <label className="flex cursor-pointer flex-col items-center gap-3 rounded-card border border-dashed border-white/15 bg-card px-6 py-10 text-center">
+            <div className="relative flex cursor-pointer flex-col items-center gap-3 rounded-card border border-dashed border-white/15 bg-card px-6 py-10 text-center">
               <FileJson size={32} className="text-accent" />
               <span className="font-medium text-txt-primary">Choose backup file</span>
               <span className="text-xs text-txt-muted">.json</span>
-              <input type="file" accept=".json,application/json" onChange={handleFile} className="hidden" />
-            </label>
+              <input
+                type="file"
+                accept=".json,application/json"
+                aria-label="Choose JSON backup file"
+                onChange={handleFile}
+                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+              />
+            </div>
             {error && <p className="mt-4 text-sm text-expense">{error}</p>}
           </>
         )}
@@ -126,24 +125,11 @@ export default function ImportJson({ open, onClose, onImported }) {
               )}
             </div>
 
-            <h2 className="mb-2 text-sm font-medium text-txt-secondary">How to import</h2>
-            <div className="mb-4 space-y-2">
-              <ModeOption
-                active={mode === 'merge'}
-                onClick={() => {
-                  setMode('merge')
-                  setConfirmReplace(false)
-                }}
-                title="Merge into my Supabase data"
-                desc="Reuses accounts/categories with matching names and adds transactions and reminders. May duplicate rows if they were already uploaded."
-              />
-              <ModeOption
-                active={mode === 'replace'}
-                onClick={() => setMode('replace')}
-                title="Replace my Supabase data"
-                desc="Replaces all budget data in this Supabase account with this backup. This cannot be undone."
-                danger
-              />
+            <div className="mb-4 rounded-card border border-expense/30 bg-expense/5 p-3.5">
+              <h2 className="text-sm font-semibold text-expense">This replaces your cloud budget</h2>
+              <p className="mt-1 text-xs leading-snug text-txt-secondary">
+                The selected backup will overwrite all budget data for your signed-in account in Supabase. This cannot be undone.
+              </p>
             </div>
 
             {error && <p className="mb-3 text-sm text-expense">{error}</p>}
@@ -151,21 +137,9 @@ export default function ImportJson({ open, onClose, onImported }) {
             <button
               onClick={handleApply}
               disabled={busy}
-              className={`w-full rounded-2xl py-3.5 font-semibold transition-colors disabled:opacity-50 ${
-                mode === 'replace'
-                  ? confirmReplace
-                    ? 'bg-expense text-white'
-                    : 'border border-expense bg-expense/10 text-expense'
-                  : 'bg-accent text-black active:opacity-80'
-              }`}
+              className="w-full rounded-2xl bg-expense py-3.5 font-semibold text-white transition-colors active:opacity-80 disabled:opacity-50"
             >
-              {busy
-                ? 'Uploading to Supabase…'
-                : mode === 'replace'
-                ? confirmReplace
-                  ? 'Tap again to replace cloud data'
-                  : 'Replace cloud data…'
-                : 'Upload and merge'}
+              {busy ? 'Saving backup to Supabase…' : 'Replace cloud data with this backup'}
             </button>
             {busy && (
               <p className="mt-3 text-center text-xs text-txt-muted" role="status" aria-live="polite">
@@ -180,10 +154,10 @@ export default function ImportJson({ open, onClose, onImported }) {
             <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-accent/15">
               <Check size={28} className="text-accent" />
             </div>
-            <h2 className="mb-2 text-lg font-semibold text-txt-primary">Import complete</h2>
+            <h2 className="mb-2 text-lg font-semibold text-txt-primary">Backup saved to Supabase</h2>
             <p className="mb-6 text-sm text-txt-secondary">
-              {result.transactions} transactions, {result.accounts} new accounts,{' '}
-              {result.categories} new categories, {result.scheduled} reminders.
+              Saved {result.transactions} transactions, {result.accounts} accounts,{' '}
+              {result.categories} categories, {result.scheduled} reminders to your cloud budget.
             </p>
             <button
               onClick={onClose}
@@ -198,24 +172,12 @@ export default function ImportJson({ open, onClose, onImported }) {
   )
 }
 
-function ModeOption({ active, onClick, title, desc, danger }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={`w-full rounded-card border p-3.5 text-left transition-colors ${
-        active
-          ? danger
-            ? 'border-expense/60 bg-expense/10'
-            : 'border-accent/60 bg-accent/10'
-          : 'border-hairline bg-card'
-      }`}
-    >
-      <div className={`text-sm font-semibold ${danger && active ? 'text-expense' : 'text-txt-primary'}`}>
-        {title}
-      </div>
-      <div className="mt-0.5 text-xs leading-snug text-txt-muted">{desc}</div>
-    </button>
-  )
+function readFileText(file) {
+  if (typeof file.text === 'function') return file.text()
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result ?? ''))
+    reader.onerror = () => reject(reader.error || new Error('Could not read the selected file.'))
+    reader.readAsText(file)
+  })
 }
