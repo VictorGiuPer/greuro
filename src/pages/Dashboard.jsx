@@ -45,7 +45,7 @@ function localMonthKey(date = new Date()) {
  * period: spending donut, net earnings, per-account cash flow, and the
  * forward net-worth forecast.
  */
-export default function Dashboard({ prefillAmount, onPrefillConsumed }) {
+export default function Dashboard({ prefillAmount, onPrefillConsumed, user, onSignOut }) {
   const [accounts, setAccounts] = useState([])
   const [categories, setCategories] = useState([])
   const [scheduled, setScheduled] = useState([])
@@ -118,6 +118,12 @@ export default function Dashboard({ prefillAmount, onPrefillConsumed }) {
   useEffect(() => {
     if (!settings || accounts.length === 0) return
     const month = localMonthKey()
+    const now = new Date()
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+    // Keep the reminder near month-end, when people are already reviewing
+    // their monthly finances. It will still appear on the next visit in this
+    // window if the app was closed on the first eligible day.
+    if (now.getDate() < lastDay - 6) return
     const backupMonth = settings.lastBackupAt
       ? localMonthKey(new Date(settings.lastBackupAt))
       : null
@@ -469,6 +475,8 @@ export default function Dashboard({ prefillAmount, onPrefillConsumed }) {
         accounts={accounts}
         categories={categories}
         onChanged={reloadMeta}
+        user={user}
+        onSignOut={onSignOut}
       />
     </div>
   )

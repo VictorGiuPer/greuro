@@ -46,8 +46,15 @@ export async function exportBackupFile({ recordExport = true } = {}) {
   const a = document.createElement('a')
   a.href = url
   a.download = `budget-backup-${new Date().toISOString().slice(0, 10)}.json`
+  a.style.display = 'none'
+  document.body.appendChild(a)
   a.click()
-  URL.revokeObjectURL(url)
+  // Mobile browsers may begin handling the download after click() returns.
+  // Keep the object URL alive briefly so the generated file remains readable.
+  window.setTimeout(() => {
+    URL.revokeObjectURL(url)
+    a.remove()
+  }, 1000)
   if (recordExport) await setSetting('lastBackupAt', Date.now())
 }
 

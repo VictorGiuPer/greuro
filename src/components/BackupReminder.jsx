@@ -19,9 +19,8 @@ export default function BackupReminder({
       </div>
       <h2 className="text-xl font-semibold text-txt-primary">Back up your budget</h2>
       <p className="mt-2 text-sm leading-relaxed text-txt-secondary">
-        Greuro keeps your data in this browser. Download a JSON backup and save it somewhere
-        separate, such as cloud storage or another device, so a browser reset cannot take your
-        budget with it.
+        Greuro saves your budget to your signed-in Supabase account. Download a JSON safety copy
+        and save it somewhere separate so you can restore your budget if you ever need to.
       </p>
       {lastBackupAt != null && (
         <p className="mt-3 text-xs text-txt-muted">Last backup export: {formatDate(lastBackupAt)}</p>

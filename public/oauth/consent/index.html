@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0A0B0F" />
+    <title>Connect to greuro</title>
+  </head>
+  <body>
+    <p>Opening Greuro’s secure connection page…</p>
+    <script>
+      const sourceUrl = new URL(window.location.href)
+      const authorizationId = sourceUrl.searchParams.get('authorization_id')
+      const routeIndex = sourceUrl.pathname.lastIndexOf('/oauth/consent')
+      if (authorizationId && routeIndex >= 0) {
+        const appUrl = new URL(sourceUrl.origin)
+        appUrl.pathname = sourceUrl.pathname.slice(0, routeIndex + 1)
+        appUrl.searchParams.set('mcp_consent', '1')
+        appUrl.searchParams.set('authorization_id', authorizationId)
+        window.location.replace(appUrl)
+      } else {
+        document.body.textContent = 'This connection link is incomplete. Return to your MCP client and try again.'
+      }
+    </script>
+  </body>
+</html>

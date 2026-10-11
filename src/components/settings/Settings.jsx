@@ -9,6 +9,10 @@ import {
   Sprout,
   Trash2,
   Plane,
+  LogOut,
+  Link2,
+  Copy,
+  Check,
 } from 'lucide-react'
 import {
   addAccount,
@@ -36,6 +40,7 @@ import AccountForm from './AccountForm'
 import CategoryForm from './CategoryForm'
 import ImportJson from './ImportJson'
 import BlueCoinsImport from './BlueCoinsImport'
+import RusselsheimWorkbookImport from './RusselsheimWorkbookImport'
 import TripForm from '../TripForm'
 
 /**
@@ -44,14 +49,14 @@ import TripForm from '../TripForm'
  * parent reloads and passes fresh props (which also refreshes the Transaction
  * form's dropdowns).
  */
-export default function Settings({ open, onClose, accounts, categories, onChanged }) {
+export default function Settings({ open, onClose, accounts, categories, onChanged, user, onSignOut }) {
   // editor = null | { type:'account'|'category', item: object|null }
   const [editor, setEditor] = useState(null)
   // Preferences form (strings; German comma decimals allowed).
   const [prefs, setPrefs] = useState(null)
   const [prefsNote, setPrefsNote] = useState('')
   // Data-management state.
-  const [dataView, setDataView] = useState(null) // null | 'json' | 'bluecoins'
+  const [dataView, setDataView] = useState(null) // null | 'json' | 'bluecoins' | 'russelsheim'
   const [dataNote, setDataNote] = useState('')
   const [wipeText, setWipeText] = useState('')
   const [busy, setBusy] = useState(false)
@@ -63,6 +68,8 @@ export default function Settings({ open, onClose, accounts, categories, onChange
   const [tripList, setTripList] = useState([])
   const [tripFormOpen, setTripFormOpen] = useState(false)
   const [editingTrip, setEditingTrip] = useState(null)
+  const [mcpOpen, setMcpOpen] = useState(false)
+  const [mcpCopied, setMcpCopied] = useState(false)
   // Android auto-fill guide
 
   // Reset + (re)load preferences whenever the overlay is (re)opened.
@@ -126,6 +133,21 @@ export default function Settings({ open, onClose, accounts, categories, onChange
       setDataNote('Backup downloaded.')
     } finally {
       setBusy(false)
+    }
+  }
+
+  const mcpEndpoint = import.meta.env.VITE_SUPABASE_URL
+    ? `${import.meta.env.VITE_SUPABASE_URL.replace(/\/$/, '')}/functions/v1/mcp`
+    : ''
+
+  async function copyMcpEndpoint() {
+    if (!mcpEndpoint) return
+    try {
+      await navigator.clipboard.writeText(mcpEndpoint)
+      setMcpCopied(true)
+      window.setTimeout(() => setMcpCopied(false), 2000)
+    } catch {
+      setMcpCopied(false)
     }
   }
 
@@ -430,8 +452,8 @@ export default function Settings({ open, onClose, accounts, categories, onChange
                 />
                 <DataRow
                   icon={Upload}
-                  title="Restore JSON backup"
-                  subtitle="Merge or replace, with preview"
+                  title="Upload or restore JSON backup"
+                  subtitle="Preview the file, then save it to your Supabase account"
                   onClick={() => setDataView('json')}
                   disabled={busy}
                   divider
@@ -441,6 +463,22 @@ export default function Settings({ open, onClose, accounts, categories, onChange
                   title="Import from BlueCoins"
                   subtitle="CSV / XLSX with column mapping & preview"
                   onClick={() => setDataView('bluecoins')}
+                  disabled={busy}
+                  divider
+                />
+                <DataRow
+                  icon={Upload}
+                  title="Import monthly budget workbook"
+                  subtitle="German Miete / Einkaufen / Mensa / Rest layout"
+                  onClick={() => setDataView('russelsheim')}
+                  disabled={busy}
+                  divider
+                />
+                <DataRow
+                  icon={LogOut}
+                  title="Sign out"
+                  subtitle={user?.email || 'Supabase account'}
+                  onClick={onSignOut}
                   disabled={busy}
                   divider
                 />
@@ -462,8 +500,8 @@ export default function Settings({ open, onClose, accounts, categories, onChange
                   Erase all data
                 </h3>
                 <p className="mb-3 text-xs text-txt-muted">
-                  Deletes every account, category, transaction, reminder and setting from this
-                  device. There is no undo. Export a backup first.
+                  Deletes every account, category, transaction, reminder and setting from your
+                  Supabase account. There is no undo. Export a backup first.
                 </p>
                 <div className="flex gap-2">
                   <input
@@ -484,6 +522,56 @@ export default function Settings({ open, onClose, accounts, categories, onChange
               </div>
             </section>
 
+            {/* MCP connection */}
+            <section className="mb-8">
+              <h2 className="mb-3 text-base font-semibold text-txt-primary">AI connections</h2>
+              <div className="rounded-card border border-hairline bg-card p-4">
+                <div className="flex items-start gap-3">
+                  <Link2 size={19} className="mt-0.5 shrink-0 text-accent" aria-hidden="true" />
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-medium text-txt-primary">Connect MCP</h3>
+                    <p className="mt-1 text-sm leading-snug text-txt-secondary">
+                      Connect Greuro to an MCP-compatible AI client such as Claude or Gemini. The client can access your budget after you sign in and approve the request.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMcpOpen((value) => !value)}
+                  aria-expanded={mcpOpen}
+                  className="mt-4 rounded-2xl bg-accent px-4 py-2.5 text-sm font-semibold text-black active:opacity-80"
+                >
+                  {mcpOpen ? 'Hide connection details' : 'Connect MCP'}
+                </button>
+                {mcpOpen && (
+                  <div className="mt-4 rounded-2xl border border-hairline bg-elevated p-3">
+                    <p className="mb-2 text-xs font-medium text-txt-secondary">MCP server URL</p>
+                    {mcpEndpoint ? (
+                      <>
+                        <div className="flex items-center gap-2">
+                          <code className="min-w-0 flex-1 break-all text-xs text-txt-primary">{mcpEndpoint}</code>
+                          <button
+                            type="button"
+                            onClick={copyMcpEndpoint}
+                            aria-label={mcpCopied ? 'MCP URL copied' : 'Copy MCP URL'}
+                            className="flex shrink-0 items-center gap-1.5 rounded-xl border border-hairline px-3 py-2 text-xs font-semibold text-txt-primary active:bg-white/5"
+                          >
+                            {mcpCopied ? <Check size={14} /> : <Copy size={14} />}
+                            {mcpCopied ? 'Copied' : 'Copy'}
+                          </button>
+                        </div>
+                        <p className="mt-3 text-xs leading-snug text-txt-muted">
+                          In your AI client, add a remote MCP server using this URL. Sign in to Greuro when the browser opens, then approve the access request to finish connecting. Your AI client may ask you to confirm individual actions.
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-xs text-expense">MCP is unavailable because this app has no Supabase project URL configured.</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </section>
+
             {/* About */}
             <section className="mb-8">
               <h2 className="mb-3 text-base font-semibold text-txt-primary">About</h2>
@@ -493,9 +581,9 @@ export default function Settings({ open, onClose, accounts, categories, onChange
                   <p className="font-medium text-txt-primary">greuro · grow your euros</p>
                 </div>
                 <p className="leading-snug">
-                  Local-first personal budgeting. All data lives in this device's browser storage
-                  (IndexedDB): no cloud, no account, no telemetry. Install it to use it like a
-                  native app, full-screen and offline.
+                  Your budget is saved to the private Supabase account shown above. An internet
+                  connection is required to view and change budget data. JSON exports are
+                  downloaded separately as safety copies.
                 </p>
                 {/* Hides itself when already installed or when the browser can't. */}
                 <InstallAppButton variant="inline" />
@@ -512,6 +600,11 @@ export default function Settings({ open, onClose, accounts, categories, onChange
       />
       <BlueCoinsImport
         open={dataView === 'bluecoins'}
+        onClose={() => setDataView(null)}
+        onImported={onChanged}
+      />
+      <RusselsheimWorkbookImport
+        open={dataView === 'russelsheim'}
         onClose={() => setDataView(null)}
         onImported={onChanged}
       />

@@ -135,7 +135,7 @@ export default function InstallAppButton({ variant = 'card' }) {
               </GuideStep>
               <GuideStep n={3} icon={Check}>
                 Tap <strong className="text-txt-primary">Add</strong>. greuro now opens full-screen,
-                offline, like a native app.
+                like a native app. An internet connection is still needed for your budget.
               </GuideStep>
             </ol>
           </>
@@ -153,7 +153,7 @@ export default function InstallAppButton({ variant = 'card' }) {
         )}
 
         <p className="mt-5 text-xs leading-snug text-txt-muted">
-          Installing only adds an icon. Your data stays on this device either way.
+          Installing adds an icon. Your budget remains in your Supabase account and needs an internet connection.
         </p>
       </Sheet>
     </>

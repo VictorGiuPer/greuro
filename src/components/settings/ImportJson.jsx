@@ -93,8 +93,8 @@ export default function ImportJson({ open, onClose, onImported }) {
         {stage === 'pick' && (
           <>
             <p className="mb-4 text-sm text-txt-secondary">
-              Choose a <span className="text-txt-primary">budget-backup-….json</span> file exported
-              from this app. You'll see a summary before anything is written.
+              Choose a <span className="text-txt-primary">budget-backup-….json</span> file. After
+              you review it, the data will be saved to your signed-in Supabase account.
             </p>
             <label className="flex cursor-pointer flex-col items-center gap-3 rounded-card border border-dashed border-white/15 bg-card px-6 py-10 text-center">
               <FileJson size={32} className="text-accent" />
@@ -131,14 +131,14 @@ export default function ImportJson({ open, onClose, onImported }) {
                   setMode('merge')
                   setConfirmReplace(false)
                 }}
-                title="Merge into current data"
-                desc="Reuses accounts/categories with matching names; adds all transactions and reminders. May duplicate rows if they were already imported."
+                title="Merge into my Supabase data"
+                desc="Reuses accounts/categories with matching names and adds transactions and reminders. May duplicate rows if they were already uploaded."
               />
               <ModeOption
                 active={mode === 'replace'}
                 onClick={() => setMode('replace')}
-                title="Replace everything"
-                desc="Erases ALL current data first, then restores the backup exactly (lossless)."
+                title="Replace my Supabase data"
+                desc="Replaces all budget data in this Supabase account with this backup. This cannot be undone."
                 danger
               />
             </div>
@@ -158,9 +158,9 @@ export default function ImportJson({ open, onClose, onImported }) {
             >
               {mode === 'replace'
                 ? confirmReplace
-                  ? 'Tap again to erase & restore'
-                  : 'Replace everything…'
-                : 'Merge into my data'}
+                  ? 'Tap again to replace cloud data'
+                  : 'Replace cloud data…'
+                : 'Upload and merge'}
             </button>
           </>
         )}

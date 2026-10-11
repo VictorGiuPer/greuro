@@ -4,6 +4,7 @@ import { addAccount, seedIfEmpty } from '../../db'
 import AccountForm from '../settings/AccountForm'
 import ImportJson from '../settings/ImportJson'
 import BlueCoinsImport from '../settings/BlueCoinsImport'
+import RusselsheimWorkbookImport from '../settings/RusselsheimWorkbookImport'
 import InstallAppButton from '../InstallAppButton'
 
 /**
@@ -13,7 +14,7 @@ import InstallAppButton from '../InstallAppButton'
  */
 export default function Onboarding({ onComplete }) {
   const [view, setView] = useState('menu') // menu | account
-  const [importView, setImportView] = useState(null) // null | 'json' | 'bluecoins'
+  const [importView, setImportView] = useState(null) // null | 'json' | 'bluecoins' | 'russelsheim'
   const [busy, setBusy] = useState(false)
   const [imported, setImported] = useState(false)
 
@@ -46,8 +47,8 @@ export default function Onboarding({ onComplete }) {
             <img src={`${import.meta.env.BASE_URL}logo.png`} alt="" aria-hidden="true" className="mb-5 h-20 w-20" />
             <h1 className="mb-2 text-2xl font-bold">Welcome to greuro</h1>
             <p className="max-w-[280px] text-sm leading-relaxed text-txt-secondary">
-              Grow your euros. Private, offline budgeting. Everything stays on this device: no
-              account, no cloud.
+              Grow your euros. Your budget is saved securely to your Supabase account and follows
+              you across devices.
             </p>
           </div>
 
@@ -57,7 +58,7 @@ export default function Onboarding({ onComplete }) {
 
             <OptionCard
               icon={Wallet}
-              title="Create my first account"
+              title="Create my first budget account"
               desc="Start fresh with a checking or savings account"
               onClick={() => setView('account')}
               primary
@@ -81,6 +82,12 @@ export default function Onboarding({ onComplete }) {
               desc="Bring your history over (CSV / XLSX export)"
               onClick={() => setImportView('bluecoins')}
             />
+            <OptionCard
+              icon={FileSpreadsheet}
+              title="Import monthly budget workbook"
+              desc="German Miete / Einkaufen / Mensa / Rest history"
+              onClick={() => setImportView('russelsheim')}
+            />
           </div>
         </>
       ) : (
@@ -93,7 +100,7 @@ export default function Onboarding({ onComplete }) {
             <ArrowLeft size={17} />
             Back
           </button>
-          <h1 className="mb-1 text-xl font-bold">Your first account</h1>
+          <h1 className="mb-1 text-xl font-bold">Your first budget account</h1>
           <p className="mb-5 text-sm text-txt-secondary">
             Where your money lives, e.g. "Checking". You can add more later in Settings.
           </p>
@@ -108,6 +115,11 @@ export default function Onboarding({ onComplete }) {
       />
       <BlueCoinsImport
         open={importView === 'bluecoins'}
+        onClose={handleImportClosed}
+        onImported={() => setImported(true)}
+      />
+      <RusselsheimWorkbookImport
+        open={importView === 'russelsheim'}
         onClose={handleImportClosed}
         onImported={() => setImported(true)}
       />

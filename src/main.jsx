@@ -5,10 +5,16 @@ import './index.css'
 // once, often before React mounts, so this import must happen up here.
 import './lib/installPrompt'
 import App from './App.jsx'
+import OAuthConsent from './oauth/consent.jsx'
+
+const path = window.location.pathname.replace(/\/+$/, '')
+const isConsentRoute = path.endsWith('/oauth/consent')
+  || new URLSearchParams(window.location.search).get('mcp_consent') === '1'
+const Root = isConsentRoute ? OAuthConsent : App
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <App />
+    <Root />
   </StrictMode>,
 )
 

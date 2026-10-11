@@ -1,0 +1,4 @@
+project_id = "greuro"
+
+[functions.mcp]
+verify_jwt = false
