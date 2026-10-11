@@ -35,7 +35,10 @@ export default function ImportJson({ open, onClose, onImported }) {
     if (!file) return
     setError('')
     try {
-      const parsed = JSON.parse(await file.text())
+      // Some mobile file providers add a UTF-8 BOM to otherwise valid JSON.
+      // JSON.parse rejects that leading character, so remove it before parsing.
+      const text = (await file.text()).replace(/^\uFEFF/, '')
+      const parsed = JSON.parse(text)
       const valid = validateBackup(parsed)
       if (!valid.ok) {
         setError(valid.error)
@@ -156,12 +159,19 @@ export default function ImportJson({ open, onClose, onImported }) {
                   : 'bg-accent text-black active:opacity-80'
               }`}
             >
-              {mode === 'replace'
+              {busy
+                ? 'Uploading to Supabase…'
+                : mode === 'replace'
                 ? confirmReplace
                   ? 'Tap again to replace cloud data'
                   : 'Replace cloud data…'
                 : 'Upload and merge'}
             </button>
+            {busy && (
+              <p className="mt-3 text-center text-xs text-txt-muted" role="status" aria-live="polite">
+                Saving the backup to your signed-in Supabase account. Keep this screen open.
+              </p>
+            )}
           </>
         )}
 
