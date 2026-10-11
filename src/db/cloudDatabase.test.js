@@ -62,4 +62,16 @@ describe('cloud database', () => {
     await expect(db.accounts.add({ name: 'Checking' })).rejects.toThrow('Network unavailable.')
     expect(await db.accounts.toArray()).toEqual([])
   })
+
+  it('does not report success when Supabase returns no save confirmation', async () => {
+    const client = fakeSupabase()
+    const db = new CloudDatabase(client)
+    await db.initialize('user-1')
+    client.rpc.mockResolvedValueOnce({ data: null, error: null })
+
+    await expect(db.accounts.add({ name: 'Checking' })).rejects.toThrow(
+      'Supabase did not confirm that the budget was saved.',
+    )
+    expect(await db.accounts.toArray()).toEqual([])
+  })
 })

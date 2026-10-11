@@ -72,7 +72,7 @@ describe('backup round-trip', () => {
     expect(await db.transactions.count()).toBe(3)
   })
 
-  it('uploads the original v1 export shape from before Supabase to a fresh cloud account', async () => {
+  it('replaces existing cloud data with the original v1 export shape from before Supabase', async () => {
     // This matches the JSON structure emitted by the original local-only app:
     // it has the five base arrays, with no later goals/trips arrays.
     const julyExport = {
@@ -87,7 +87,14 @@ describe('backup round-trip', () => {
         settings: [{ key: 'inflationRate', value: 2 }],
       },
     }
-    const saved = { row: null, revision: 0 }
+    const saved = {
+      row: {
+        user_id: 'user-1',
+        data: { format: 'budget-app-backup', version: 1, data: { accounts: [{ id: 1, name: 'Old cloud account' }] } },
+        updated_at: 'old-revision',
+      },
+      revision: 0,
+    }
     const cloudClient = {
       from: () => ({
         select: () => ({
@@ -111,6 +118,7 @@ describe('backup round-trip', () => {
 
     expect(imported).toMatchObject({ accounts: 1, categories: 1, transactions: 1, scheduled: 0, settings: 1, goals: 0, trips: 0 })
     expect(saved.row.data.data.accounts).toEqual(julyExport.data.accounts)
+    expect(saved.row.data.data.accounts.some((account) => account.name === 'Old cloud account')).toBe(false)
     expect(saved.row.data.data.transactions).toEqual(julyExport.data.transactions)
     expect(saved.row.data.data.settings).toEqual(julyExport.data.settings)
     expect(cloudClient.rpc).toHaveBeenCalledTimes(1)

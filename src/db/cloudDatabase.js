@@ -200,6 +200,7 @@ export class CloudDatabase {
       p_expected_updated_at: this.updatedAt,
     })
     if (error) throw new Error(error.message || 'Could not save to Supabase.')
+    if (!data) throw new Error('Supabase did not confirm that the budget was saved.')
     this.updatedAt = data
   }
 }

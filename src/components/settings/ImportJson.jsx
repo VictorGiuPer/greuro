@@ -4,11 +4,11 @@ import { validateBackup, applyBackup } from '../../db/backup'
 import { formatDate } from '../../lib/format'
 
 /**
- * JSON backup restore flow: pick file → validated preview (counts, source
- * date) → replace the signed-in user's cloud budget with the backup.
+ * JSON backup restore flow: choose file → validate → replace the signed-in
+ * user's cloud budget and show the saved result.
  */
 export default function ImportJson({ open, onClose, onImported }) {
-  const [stage, setStage] = useState('pick') // pick | preview | done
+  const [stage, setStage] = useState('pick') // pick | preview | uploading | done
   const [json, setJson] = useState(null)
   const [info, setInfo] = useState(null) // { counts, exportedAt }
   const [error, setError] = useState('')
@@ -25,14 +25,17 @@ export default function ImportJson({ open, onClose, onImported }) {
   }, [open])
 
   async function handleFile(e) {
-    const file = e.target.files?.[0]
-    e.target.value = '' // allow re-picking the same file
+    const input = e.currentTarget
+    const file = input.files?.[0]
     if (!file) return
     setError('')
     try {
       // Some mobile file providers add a UTF-8 BOM to otherwise valid JSON.
       // JSON.parse rejects that leading character, so remove it before parsing.
       const text = (await readFileText(file)).replace(/^\uFEFF/, '')
+      // Reset only after reading; some mobile file pickers invalidate a file
+      // handle if the input is cleared while the read is still in progress.
+      input.value = ''
       const parsed = JSON.parse(text)
       const valid = validateBackup(parsed)
       if (!valid.ok) {
@@ -41,23 +44,39 @@ export default function ImportJson({ open, onClose, onImported }) {
       }
       setJson(parsed)
       setInfo(valid)
-      setStage('preview')
-    } catch {
-      setError('Could not read that file as JSON.')
+      // Choosing a valid backup is the import action. Start the cloud write
+      // immediately so there is no hidden follow-up tap on mobile.
+      setStage('uploading')
+      await saveBackup(parsed)
+    } catch (err) {
+      input.value = ''
+      setStage(json ? 'preview' : 'pick')
+      setError(err?.message || 'Could not read or upload that backup.')
     }
   }
 
   async function handleApply() {
+    if (!json) return
+    setStage('uploading')
+    await saveBackup(json)
+  }
+
+  async function saveBackup(backup) {
     setBusy(true)
     setError('')
     try {
       // Restore means restore: replace the cloud snapshot with the selected
       // backup so existing data cannot silently prevent/alter the import.
-      const imported = await applyBackup(json, 'replace')
-      await onImported?.()
+      const imported = await applyBackup(backup, 'replace')
       setResult(imported)
       setStage('done')
+      try {
+        await onImported?.()
+      } catch (refreshError) {
+        console.error('Backup was saved, but the screen could not refresh:', refreshError)
+      }
     } catch (err) {
+      setStage('preview')
       setError(err.message || 'Import failed.')
     } finally {
       setBusy(false)
@@ -89,9 +108,14 @@ export default function ImportJson({ open, onClose, onImported }) {
         {stage === 'pick' && (
           <>
             <p className="mb-4 text-sm text-txt-secondary">
-              Choose a <span className="text-txt-primary">budget-backup-….json</span> file. After
-              you review it, the data will be saved to your signed-in Supabase account.
+              Choose a <span className="text-txt-primary">budget-backup-….json</span> file. It
+              will replace the data in your signed-in Supabase account.
             </p>
+            <div className="mb-4 rounded-card border border-expense/30 bg-expense/5 p-3.5">
+              <p className="text-xs leading-snug text-txt-secondary">
+                Choosing a valid backup immediately replaces your entire cloud budget. This cannot be undone.
+              </p>
+            </div>
             <div className="relative flex cursor-pointer flex-col items-center gap-3 rounded-card border border-dashed border-white/15 bg-card px-6 py-10 text-center">
               <FileJson size={32} className="text-accent" />
               <span className="font-medium text-txt-primary">Choose backup file</span>
@@ -108,7 +132,7 @@ export default function ImportJson({ open, onClose, onImported }) {
           </>
         )}
 
-        {stage === 'preview' && info && (
+        {(stage === 'preview' || stage === 'uploading') && info && (
           <>
             <div className="mb-4 rounded-card border border-hairline bg-card p-4">
               <h2 className="mb-2 text-sm font-medium text-txt-secondary">This backup contains</h2>
@@ -127,23 +151,23 @@ export default function ImportJson({ open, onClose, onImported }) {
 
             <div className="mb-4 rounded-card border border-expense/30 bg-expense/5 p-3.5">
               <h2 className="text-sm font-semibold text-expense">This replaces your cloud budget</h2>
-              <p className="mt-1 text-xs leading-snug text-txt-secondary">
-                The selected backup will overwrite all budget data for your signed-in account in Supabase. This cannot be undone.
-              </p>
+              <p className="mt-1 text-xs leading-snug text-txt-secondary">The selected backup overwrites all budget data for this signed-in account.</p>
             </div>
 
             {error && <p className="mb-3 text-sm text-expense">{error}</p>}
 
-            <button
-              onClick={handleApply}
-              disabled={busy}
-              className="w-full rounded-2xl bg-expense py-3.5 font-semibold text-white transition-colors active:opacity-80 disabled:opacity-50"
-            >
-              {busy ? 'Saving backup to Supabase…' : 'Replace cloud data with this backup'}
-            </button>
-            {busy && (
+            {stage === 'preview' && (
+              <button
+                onClick={handleApply}
+                disabled={busy}
+                className="w-full rounded-2xl bg-expense py-3.5 font-semibold text-white transition-colors active:opacity-80 disabled:opacity-50"
+              >
+                Retry saving backup to Supabase
+              </button>
+            )}
+            {stage === 'uploading' && (
               <p className="mt-3 text-center text-xs text-txt-muted" role="status" aria-live="polite">
-                Saving the backup to your signed-in Supabase account. Keep this screen open.
+                {busy ? 'Saving the backup to Supabase… Keep this screen open.' : 'Preparing upload…'}
               </p>
             )}
           </>
