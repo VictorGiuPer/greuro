@@ -114,10 +114,11 @@ export default function ImportJson({ open, onClose, onImported }) {
     onClose?.()
   }
 
-  function openFilePicker() {
+  function prepareFilePicker() {
     const input = inputRef.current
     if (!input || busy) return
     stopPickerWatch()
+    input.value = ''
     input.value = ''
     setError('')
     setPickerPending(true)
@@ -153,7 +154,6 @@ export default function ImportJson({ open, onClose, onImported }) {
       window.removeEventListener('focus', returnedToApp)
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }
-    input.click()
   }
 
   function stopPickerWatch() {
@@ -195,25 +195,20 @@ export default function ImportJson({ open, onClose, onImported }) {
                 Choosing a valid backup immediately replaces your entire cloud budget. This cannot be undone.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={openFilePicker}
-              disabled={busy || stage === 'reading'}
-              className="flex w-full flex-col items-center gap-3 rounded-card border border-dashed border-white/15 bg-card px-6 py-10 text-center disabled:opacity-60"
-            >
-              <FileJson size={32} className="text-accent" />
-              <span className="font-medium text-txt-primary">
-                {stage === 'reading' ? 'Reading backup file…' : 'Choose backup file'}
-              </span>
-              <span className="text-xs text-txt-muted">.json</span>
-            </button>
+            <div className="rounded-card border border-dashed border-white/15 bg-card px-5 py-6 text-center">
+              <FileJson size={32} className="mx-auto mb-3 text-accent" />
+              <p className="font-medium text-txt-primary">{stage === 'reading' ? 'Reading backup file…' : 'Choose backup file'}</p>
+              <p className="mt-1 text-xs text-txt-muted">Select a .json backup from your device</p>
+            </div>
             <input
               ref={inputRef}
               type="file"
               accept=".json,application/json"
               aria-label="Choose JSON backup file"
+              onClick={prepareFilePicker}
               onChange={handleFile}
-              className="sr-only"
+              disabled={busy || stage === 'reading'}
+              className="mt-3 block w-full cursor-pointer rounded-card border border-hairline bg-card p-3 text-sm text-txt-primary file:mr-3 file:rounded-xl file:border-0 file:bg-accent file:px-4 file:py-2 file:font-semibold file:text-black disabled:opacity-60"
             />
             {pickerPending && stage !== 'reading' && (
               <p className="mt-4 text-sm text-txt-secondary" role="status">
