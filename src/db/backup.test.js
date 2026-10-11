@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { db } from './db'
 import { buildBackup, validateBackup, applyBackup } from './backup'
+import { CloudDatabase } from './cloudDatabase'
 import { noon } from '../lib/dates'
 
 async function clearAll() {
@@ -69,6 +70,50 @@ describe('backup round-trip', () => {
     expect(await db.goals.count()).toBe(0)
     expect(await db.trips.count()).toBe(0)
     expect(await db.transactions.count()).toBe(3)
+  })
+
+  it('uploads the original v1 export shape from before Supabase to a fresh cloud account', async () => {
+    // This matches the JSON structure emitted by the original local-only app:
+    // it has the five base arrays, with no later goals/trips arrays.
+    const julyExport = {
+      format: 'budget-app-backup',
+      version: 1,
+      exportedAt: '2026-07-19T12:00:00.000Z',
+      data: {
+        accounts: [{ id: 7, name: 'Checking', type: 'asset', startingBalance: 100 }],
+        categories: [{ id: 3, name: 'Food', kind: 'expense' }],
+        transactions: [{ id: 11, type: 'expense', amount: 12.5, date: 1784462400000, categoryId: 3, accountId: 7 }],
+        scheduled: [],
+        settings: [{ key: 'inflationRate', value: 2 }],
+      },
+    }
+    const saved = { row: null, revision: 0 }
+    const cloudClient = {
+      from: () => ({
+        select: () => ({
+          eq: () => ({ maybeSingle: async () => ({ data: saved.row, error: null }) }),
+        }),
+      }),
+      rpc: vi.fn(async (_name, { p_data, p_expected_updated_at }) => {
+        if ((saved.row && saved.row.updated_at !== p_expected_updated_at) || (!saved.row && p_expected_updated_at !== null)) {
+          return { data: null, error: new Error('Budget changed on another device.') }
+        }
+        const updated_at = `revision-${++saved.revision}`
+        saved.row = { user_id: 'user-1', data: p_data, updated_at }
+        return { data: updated_at, error: null }
+      }),
+    }
+    const cloudDb = new CloudDatabase(cloudClient)
+    await cloudDb.initialize('user-1')
+
+    expect(validateBackup(julyExport)).toMatchObject({ ok: true, counts: { accounts: 1, categories: 1, transactions: 1, scheduled: 0, settings: 1, goals: 0, trips: 0 } })
+    const imported = await applyBackup(julyExport, 'replace', cloudDb)
+
+    expect(imported).toMatchObject({ accounts: 1, categories: 1, transactions: 1, scheduled: 0, settings: 1, goals: 0, trips: 0 })
+    expect(saved.row.data.data.accounts).toEqual(julyExport.data.accounts)
+    expect(saved.row.data.data.transactions).toEqual(julyExport.data.transactions)
+    expect(saved.row.data.data.settings).toEqual(julyExport.data.settings)
+    expect(cloudClient.rpc).toHaveBeenCalledTimes(1)
   })
 })
 

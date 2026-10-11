@@ -92,7 +92,7 @@ const nameKey = (s) => String(s ?? '').trim().toLowerCase()
  * @param mode 'replace' | 'merge'
  * @returns per-table imported counts
  */
-export async function applyBackup(obj, mode) {
+export async function applyBackup(obj, mode, targetDb = db) {
   const valid = validateBackup(obj)
   if (!valid.ok) throw new Error(valid.error)
   const { accounts, categories, transactions, scheduled, settings } = obj.data
@@ -101,16 +101,16 @@ export async function applyBackup(obj, mode) {
 
   const imported = { accounts: 0, categories: 0, transactions: 0, scheduled: 0, settings: 0, goals: 0, trips: 0 }
 
-  await db.transaction('rw', TABLES.map((t) => db[t]), async () => {
+  await targetDb.transaction('rw', TABLES.map((t) => targetDb[t]), async () => {
     if (mode === 'replace') {
-      await Promise.all(TABLES.map((t) => db[t].clear()))
-      await db.accounts.bulkAdd(accounts)
-      await db.categories.bulkAdd(categories)
-      await db.transactions.bulkAdd(transactions)
-      await db.scheduled.bulkAdd(scheduled)
-      await db.settings.bulkAdd(settings)
-      await db.goals.bulkAdd(goals)
-      await db.trips.bulkAdd(trips)
+      await Promise.all(TABLES.map((t) => targetDb[t].clear()))
+      await targetDb.accounts.bulkAdd(accounts)
+      await targetDb.categories.bulkAdd(categories)
+      await targetDb.transactions.bulkAdd(transactions)
+      await targetDb.scheduled.bulkAdd(scheduled)
+      await targetDb.settings.bulkAdd(settings)
+      await targetDb.goals.bulkAdd(goals)
+      await targetDb.trips.bulkAdd(trips)
       imported.accounts = accounts.length
       imported.categories = categories.length
       imported.transactions = transactions.length
@@ -122,8 +122,8 @@ export async function applyBackup(obj, mode) {
     }
 
     // ---- merge ----
-    const existingAccounts = await db.accounts.toArray()
-    const existingCategories = await db.categories.toArray()
+    const existingAccounts = await targetDb.accounts.toArray()
+    const existingCategories = await targetDb.categories.toArray()
     const accountByName = new Map(existingAccounts.map((a) => [nameKey(a.name), a.id]))
     const categoryByKey = new Map(
       existingCategories.map((c) => [`${nameKey(c.name)}|${c.kind}`, c.id]),
@@ -135,7 +135,7 @@ export async function applyBackup(obj, mode) {
       if (match != null) {
         accountIdMap.set(a.id, match)
       } else {
-        const newId = await db.accounts.add(stripId(a))
+        const newId = await targetDb.accounts.add(stripId(a))
         accountByName.set(nameKey(a.name), newId)
         accountIdMap.set(a.id, newId)
         imported.accounts += 1
@@ -149,7 +149,7 @@ export async function applyBackup(obj, mode) {
       if (match != null) {
         categoryIdMap.set(c.id, match)
       } else {
-        const newId = await db.categories.add(stripId(c))
+        const newId = await targetDb.categories.add(stripId(c))
         categoryByKey.set(key, newId)
         categoryIdMap.set(c.id, newId)
         imported.categories += 1
@@ -159,7 +159,7 @@ export async function applyBackup(obj, mode) {
     // Trips are inserted fresh; keep an old→new id map to remap tripId.
     const tripIdMap = new Map()
     for (const trip of trips) {
-      const newId = await db.trips.add(stripId(trip))
+      const newId = await targetDb.trips.add(stripId(trip))
       tripIdMap.set(trip.id, newId)
       imported.trips += 1
     }
@@ -175,16 +175,16 @@ export async function applyBackup(obj, mode) {
     })
 
     for (const t of transactions) {
-      await db.transactions.add(remapRefs(stripId(t)))
+      await targetDb.transactions.add(remapRefs(stripId(t)))
       imported.transactions += 1
     }
     for (const s of scheduled) {
-      await db.scheduled.add(remapRefs(stripId(s)))
+      await targetDb.scheduled.add(remapRefs(stripId(s)))
       imported.scheduled += 1
     }
     // Goals carry no account/category refs — insert fresh.
     for (const g of goals) {
-      await db.goals.add(stripId(g))
+      await targetDb.goals.add(stripId(g))
       imported.goals += 1
     }
     // Settings intentionally untouched in merge mode.
