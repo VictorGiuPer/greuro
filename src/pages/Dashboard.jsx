@@ -35,6 +35,7 @@ import AddSavingsSheet from '../components/AddSavingsSheet'
 import TripForm from '../components/TripForm'
 import Fab from '../components/ui/Fab'
 import BackupReminder from '../components/BackupReminder'
+import { hasPendingJsonRestore } from '../lib/restoreIntent'
 
 function localMonthKey(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
@@ -50,7 +51,7 @@ export default function Dashboard({ prefillAmount, onPrefillConsumed, user, onSi
   const [categories, setCategories] = useState([])
   const [scheduled, setScheduled] = useState([])
   const [settings, setSettingsState] = useState(null)
-  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(() => hasPendingJsonRestore())
   const [reportOpen, setReportOpen] = useState(false)
   const [backupReminderOpen, setBackupReminderOpen] = useState(false)
   const [backupReminderBusy, setBackupReminderBusy] = useState(false)

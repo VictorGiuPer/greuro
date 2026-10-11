@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { ArrowLeft, FileJson, Check } from 'lucide-react'
 import { validateBackup, applyBackup } from '../../db/backup'
 import { formatDate } from '../../lib/format'
+import { setPendingJsonRestore } from '../../lib/restoreIntent'
 
 /**
  * JSON backup restore flow: choose file → validate → replace the signed-in
@@ -39,6 +41,7 @@ export default function ImportJson({ open, onClose, onImported }) {
       const parsed = JSON.parse(text)
       const valid = validateBackup(parsed)
       if (!valid.ok) {
+        setPendingJsonRestore(false)
         setError(valid.error)
         return
       }
@@ -50,6 +53,7 @@ export default function ImportJson({ open, onClose, onImported }) {
       await saveBackup(parsed)
     } catch (err) {
       input.value = ''
+      setPendingJsonRestore(false)
       setStage(json ? 'preview' : 'pick')
       setError(err?.message || 'Could not read or upload that backup.')
     }
@@ -70,6 +74,7 @@ export default function ImportJson({ open, onClose, onImported }) {
       const imported = await applyBackup(backup, 'replace')
       setResult(imported)
       setStage('done')
+      setPendingJsonRestore(false)
       try {
         await onImported?.()
       } catch (refreshError) {
@@ -83,7 +88,13 @@ export default function ImportJson({ open, onClose, onImported }) {
     }
   }
 
-  return (
+  function closeImport() {
+    setPendingJsonRestore(false)
+    onClose?.()
+  }
+
+  if (typeof document === 'undefined') return null
+  return createPortal((
     <div
       className={`fixed inset-0 z-[60] mx-auto flex w-full max-w-[430px] flex-col bg-bg ${
         open ? 'overlay-open translate-x-0' : 'overlay-closed pointer-events-none translate-x-full'
@@ -95,7 +106,7 @@ export default function ImportJson({ open, onClose, onImported }) {
     >
       <header className="safe-pt flex items-center gap-3 border-b border-hairline px-4 pb-4">
         <button
-          onClick={onClose}
+          onClick={closeImport}
           aria-label="Back"
           className="rounded-full p-1.5 text-txt-secondary hover:bg-white/5"
         >
@@ -125,6 +136,7 @@ export default function ImportJson({ open, onClose, onImported }) {
                 accept=".json,application/json"
                 aria-label="Choose JSON backup file"
                 onChange={handleFile}
+                onClick={() => setPendingJsonRestore(true)}
                 className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
               />
             </div>
@@ -184,7 +196,7 @@ export default function ImportJson({ open, onClose, onImported }) {
               {result.categories} categories, {result.scheduled} reminders to your cloud budget.
             </p>
             <button
-              onClick={onClose}
+              onClick={closeImport}
               className="rounded-2xl bg-accent px-8 py-3 font-semibold text-black active:opacity-80"
             >
               Done
@@ -193,7 +205,7 @@ export default function ImportJson({ open, onClose, onImported }) {
         )}
       </div>
     </div>
-  )
+  ), document.body)
 }
 
 function readFileText(file) {

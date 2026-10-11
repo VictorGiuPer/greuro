@@ -42,6 +42,7 @@ import ImportJson from './ImportJson'
 import BlueCoinsImport from './BlueCoinsImport'
 import RusselsheimWorkbookImport from './RusselsheimWorkbookImport'
 import TripForm from '../TripForm'
+import { hasPendingJsonRestore } from '../../lib/restoreIntent'
 
 /**
  * Full-screen Settings overlay for managing accounts and categories. Reads the
@@ -56,7 +57,7 @@ export default function Settings({ open, onClose, accounts, categories, onChange
   const [prefs, setPrefs] = useState(null)
   const [prefsNote, setPrefsNote] = useState('')
   // Data-management state.
-  const [dataView, setDataView] = useState(null) // null | 'json' | 'bluecoins' | 'russelsheim'
+  const [dataView, setDataView] = useState(() => (hasPendingJsonRestore() ? 'json' : null)) // null | 'json' | 'bluecoins' | 'russelsheim'
   const [dataNote, setDataNote] = useState('')
   const [wipeText, setWipeText] = useState('')
   const [busy, setBusy] = useState(false)
@@ -76,7 +77,7 @@ export default function Settings({ open, onClose, accounts, categories, onChange
   useEffect(() => {
     if (!open) return
     setEditor(null)
-    setDataView(null)
+    setDataView(hasPendingJsonRestore() ? 'json' : null)
     setDataNote('')
     setPrefsNote('')
     setWipeText('')
