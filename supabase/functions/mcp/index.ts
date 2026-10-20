@@ -4,6 +4,7 @@ import { createMcpHandler, McpServer } from 'npm:@modelcontextprotocol/server@^2
 import { pipeline } from 'npm:@supabase/middleware@1'
 import { withOAuthProtectedResource, withSupabase } from 'npm:@supabase/server@1'
 import { z } from 'npm:zod@^4.3.6'
+import { registerTransactionTools } from './transactionTools.ts'
 
 const budgetSnapshotSchema = z.object({
   format: z.literal('budget-app-backup'),
@@ -31,7 +32,7 @@ Deno.serve(
           'get_budget_data',
           {
             title: 'Read my Greuro budget',
-            description: 'Read the signed-in user’s complete Greuro budget snapshot, including their transactions and budget settings. This tool is read-only.',
+            description: "Read the signed-in user's complete Greuro budget snapshot, including their transactions and budget settings. This tool is read-only.",
             inputSchema: z.object({}),
             annotations: { readOnlyHint: true },
           },
@@ -59,7 +60,7 @@ Deno.serve(
           'update_budget_data',
           {
             title: 'Update my Greuro budget',
-            description: 'Replace the signed-in user’s Greuro budget snapshot with the supplied complete version-1 backup. Use get_budget_data first, preserve unrelated records, and make only the requested changes. This can change or remove individual budget records, but cannot delete the database or its table.',
+            description: "Restore the signed-in user's Greuro budget snapshot from a complete version-1 backup. Prefer the granular transaction tools for individual changes. Use get_budget_data first and preserve unrelated records. This can change or remove individual budget records, but cannot delete the database or its table.",
             inputSchema: z.object({ budget: budgetSnapshotSchema }),
             annotations: { readOnlyHint: false, destructiveHint: true },
           },
@@ -95,6 +96,7 @@ Deno.serve(
           },
         )
 
+        registerTransactionTools(server, supabase)
         return server
       })
 
