@@ -37,6 +37,7 @@ export default function TransactionList({
   const cursorRef = useRef(null)
   const hasMoreRef = useRef(true)
   const loadingRef = useRef(false)
+  const generationRef = useRef(0)
   const sentinelRef = useRef(null)
 
   const fetchPage = useCallback(
@@ -56,8 +57,12 @@ export default function TransactionList({
       loadingRef.current = true
       setLoading(true)
 
+      const generation = generationRef.current
       const before = reset ? null : cursorRef.current
       const page = await fetchPage(before)
+      // A filter change starts a new list. Ignore an older request that
+      // finishes later instead of restoring its filtered rows/cursor.
+      if (generation !== generationRef.current) return
 
       const next = reset ? page : [...itemsRef.current, ...page]
       itemsRef.current = next
@@ -78,10 +83,12 @@ export default function TransactionList({
 
   // Reload from the top whenever the query, filters or refreshToken change.
   useEffect(() => {
+    generationRef.current += 1
     cursorRef.current = null
     hasMoreRef.current = true
     loadingRef.current = false
     loadPage(true)
+    return () => { generationRef.current += 1 }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, filters, refreshToken])
 
@@ -107,19 +114,18 @@ export default function TransactionList({
       (filters.types?.length ||
         filters.categoryIds?.length ||
         filters.accountIds?.length ||
+        filters.tripIds?.length ||
+        filters.owedOnly ||
         filters.dateFrom != null ||
         filters.dateTo != null))
 
-  if (initialized && items.length === 0) {
-    return (
-      <div className="px-6 py-20 text-center text-txt-secondary">
-        {filtered ? 'No transactions match your filters.' : 'No transactions yet.'}
-      </div>
-    )
-  }
-
   return (
     <div>
+      {initialized && items.length === 0 && (
+        <div className="px-6 py-20 text-center text-txt-secondary">
+          {filtered ? 'No transactions match your filters.' : 'No transactions yet.'}
+        </div>
+      )}
       {groups.map((group) => (
         <section key={group.key} className="mb-2">
           <h3 className="px-4 pb-1 pt-4 text-sm font-medium text-txt-secondary">{group.label}</h3>
@@ -139,7 +145,8 @@ export default function TransactionList({
         </section>
       ))}
 
-      {/* Sentinel + loading indicator for infinite scroll. */}
+      {/* Keep the sentinel mounted even for empty results so clearing filters
+          restores infinite scrolling as well as the first page. */}
       <div ref={sentinelRef} className="h-10" />
       {loading && <div className="pb-4 text-center text-sm text-txt-muted">Loading…</div>}
       {!hasMore && items.length > 0 && (

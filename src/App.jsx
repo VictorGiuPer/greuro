@@ -4,6 +4,7 @@ import { isDatabaseEmpty } from './db/maintenance'
 import { supabase, supabaseConfigReady } from './lib/supabase'
 import { cloudDb } from './db/cloudDatabase'
 import { parsePrefillFromSearch } from './lib/prefill'
+import { createTransactionFilters } from './lib/transactionFilters'
 import BottomTabBar from './components/BottomTabBar'
 import Toast from './components/ui/Toast'
 import Onboarding from './components/onboarding/Onboarding'
@@ -15,10 +16,19 @@ import SupabaseSignIn from './components/SupabaseSignIn'
 export default function App() {
   const [auth, setAuth] = useState({ status: 'loading', user: null, error: '' })
   const [activeTab, setActiveTab] = useState('dashboard')
+  // Transactions owns its filters for this signed-in session. Overview's
+  // period/category selections remain local to Dashboard and never enter here.
+  const [transactionFilters, setTransactionFilters] = useState(createTransactionFilters)
+  const [transactionQuery, setTransactionQuery] = useState('')
   const [toast, setToast] = useState(null)
   const [boot, setBoot] = useState('loading') // loading | onboarding | ready
   // Android auto-fill: an amount arriving via share/URL → prefill a new tx.
   const [prefillAmount, setPrefillAmount] = useState(null)
+
+  useEffect(() => {
+    setTransactionFilters(createTransactionFilters())
+    setTransactionQuery('')
+  }, [auth.user?.id])
 
   useEffect(() => {
     if (!supabaseConfigReady) {
@@ -135,7 +145,14 @@ export default function App() {
         {activeTab === 'dashboard' && (
           <Dashboard prefillAmount={prefillAmount} onPrefillConsumed={clearPrefill} user={auth.user} onSignOut={handleSignOut} />
         )}
-        {activeTab === 'transactions' && <Transactions />}
+        {activeTab === 'transactions' && (
+          <Transactions
+            filters={transactionFilters}
+            setFilters={setTransactionFilters}
+            rawQuery={transactionQuery}
+            setRawQuery={setTransactionQuery}
+          />
+        )}
         {activeTab === 'reminders' && <Reminders />}
       </main>
       <BottomTabBar activeTab={activeTab} onTabChange={changeTab} />

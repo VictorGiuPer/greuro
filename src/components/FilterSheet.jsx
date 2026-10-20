@@ -4,16 +4,9 @@ import Sheet from './ui/Sheet'
 import CategoryIcon from './CategoryIcon'
 import { toDateInputValue, fromDateInputValue } from '../lib/format'
 import { startOfDayMs, endOfDayMs } from '../lib/dates'
+import { createTransactionFilters } from '../lib/transactionFilters'
 
-export const EMPTY_FILTERS = {
-  types: [],
-  categoryIds: [],
-  accountIds: [],
-  tripIds: [],
-  owedOnly: false,
-  dateFrom: null,
-  dateTo: null,
-}
+export const EMPTY_FILTERS = createTransactionFilters()
 
 /** Number of active filter dimensions (for the funnel badge). */
 export function countActiveFilters(f) {
@@ -56,7 +49,7 @@ export default function FilterSheet({ open, onClose, categories, accounts, trips
   }
 
   function clearAll() {
-    setDraft(EMPTY_FILTERS)
+    setDraft(createTransactionFilters())
   }
 
   return (

@@ -2,28 +2,26 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Search, SlidersHorizontal, Settings as SettingsIcon, X, Download } from 'lucide-react'
 import { getAccounts, getCategories, getActiveTrips, getTransactionsPage } from '../db'
 import { exportTransactionRows } from '../lib/exportXlsx'
-import { formatDate } from '../lib/format'
+import { createTransactionFilters, transactionDateLabel } from '../lib/transactionFilters'
 import TransactionList from '../components/TransactionList'
 import TransactionForm from '../components/TransactionForm'
 import Fab from '../components/ui/Fab'
-import FilterSheet, { EMPTY_FILTERS, countActiveFilters } from '../components/FilterSheet'
+import FilterSheet, { countActiveFilters } from '../components/FilterSheet'
 import Settings from '../components/settings/Settings'
 
-export default function Transactions() {
+export default function Transactions({ filters, setFilters, rawQuery, setRawQuery }) {
   const [accounts, setAccounts] = useState([])
   const [categories, setCategories] = useState([])
   const [trips, setTrips] = useState([])
   const [ready, setReady] = useState(false)
 
-  const [rawQuery, setRawQuery] = useState('')
-  const [query, setQuery] = useState('') // debounced
+  const [query, setQuery] = useState(rawQuery) // debounced, Transactions only
   const [refreshToken, setRefreshToken] = useState(0)
 
   const [formOpen, setFormOpen] = useState(false)
   const [editingTx, setEditingTx] = useState(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [filterOpen, setFilterOpen] = useState(false)
-  const [filters, setFilters] = useState(EMPTY_FILTERS)
 
   // Re-fetch accounts + categories from Dexie. Called after Settings edits and
   // in-form quick-creates so every dropdown / row reflects the latest data.
@@ -86,6 +84,13 @@ export default function Transactions() {
 
   const activeFilterCount = countActiveFilters(filters)
 
+  function clearFilters() {
+    clearTimeout(debounceRef.current)
+    setFilters(createTransactionFilters())
+    setRawQuery('')
+    setQuery('')
+  }
+
   // Export everything matching the current filters + search (all pages).
   async function exportCurrentView() {
     const rows = []
@@ -110,14 +115,14 @@ export default function Transactions() {
     for (const t of filters.types) {
       chips.push({
         key: `type-${t}`,
-        label: t[0].toUpperCase() + t.slice(1),
+        label: `Type: ${t[0].toUpperCase() + t.slice(1)}`,
         remove: () => setFilters((f) => ({ ...f, types: f.types.filter((x) => x !== t) })),
       })
     }
     for (const id of filters.categoryIds) {
       chips.push({
         key: `cat-${id}`,
-        label: categoriesById.get(id)?.name ?? 'Category',
+        label: `Category: ${categoriesById.get(id)?.name ?? id}`,
         remove: () =>
           setFilters((f) => ({ ...f, categoryIds: f.categoryIds.filter((x) => x !== id) })),
       })
@@ -125,7 +130,7 @@ export default function Transactions() {
     for (const id of filters.accountIds) {
       chips.push({
         key: `acct-${id}`,
-        label: accountsById.get(id)?.name ?? 'Account',
+        label: `Account: ${accountsById.get(id)?.name ?? id}`,
         remove: () =>
           setFilters((f) => ({ ...f, accountIds: f.accountIds.filter((x) => x !== id) })),
       })
@@ -133,7 +138,7 @@ export default function Transactions() {
     for (const id of filters.tripIds ?? []) {
       chips.push({
         key: `trip-${id}`,
-        label: tripsById.get(id)?.name ?? 'Trip',
+        label: `Trip: ${tripsById.get(id)?.name ?? id}`,
         remove: () =>
           setFilters((f) => ({ ...f, tripIds: (f.tripIds ?? []).filter((x) => x !== id) })),
       })
@@ -146,11 +151,9 @@ export default function Transactions() {
       })
     }
     if (filters.dateFrom != null || filters.dateTo != null) {
-      const from = filters.dateFrom != null ? formatDate(filters.dateFrom) : '…'
-      const to = filters.dateTo != null ? formatDate(filters.dateTo) : '…'
       chips.push({
         key: 'daterange',
-        label: `${from} – ${to}`,
+        label: transactionDateLabel(filters),
         remove: () => setFilters((f) => ({ ...f, dateFrom: null, dateTo: null })),
       })
     }
@@ -203,8 +206,8 @@ export default function Transactions() {
         </div>
 
         {/* Active filter chips */}
-        {(filterChips.length > 0 || query.trim()) && (
-          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        {(filterChips.length > 0 || rawQuery.trim()) && (
+          <div aria-label="Active transaction filters" className="mt-2 flex flex-wrap items-center gap-1.5">
             {filterChips.map((chip) => (
               <button
                 key={chip.key}
@@ -217,15 +220,24 @@ export default function Transactions() {
                 <X size={13} />
               </button>
             ))}
-            {filterChips.length > 0 && (
+            {rawQuery.trim() && (
               <button
                 type="button"
-                onClick={() => setFilters(EMPTY_FILTERS)}
-                className="min-h-[32px] rounded-full px-2.5 py-1 text-xs font-medium text-txt-secondary hover:text-txt-primary"
+                onClick={() => { setRawQuery(''); setQuery('') }}
+                aria-label="Remove search filter"
+                className="flex min-h-[32px] items-center gap-1 rounded-full border border-accent/40 bg-accent/10 py-1 pl-3 pr-2 text-xs font-medium text-accent"
               >
-                Clear all
+                Search: {rawQuery.trim()}
+                <X size={13} />
               </button>
             )}
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="min-h-[32px] rounded-full px-2.5 py-1 text-xs font-medium text-txt-secondary hover:text-txt-primary"
+            >
+              Clear filters
+            </button>
             <button
               type="button"
               onClick={exportCurrentView}

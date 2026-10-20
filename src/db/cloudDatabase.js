@@ -44,7 +44,13 @@ class CloudWhereClause {
       return (includeLower ? low >= 0 : low > 0) && (includeUpper ? high <= 0 : high < 0)
     })
   }
-  make(predicate) { return new CloudCollection(this.table, [(rows) => rows.filter(predicate)]) }
+  make(predicate) {
+    // Dexie index queries iterate in index order, independently of insertion
+    // order. Cursor paging relies on this before reverse() and limit().
+    return new CloudCollection(this.table, [
+      (rows) => rows.filter(predicate).sort((a, b) => compareField(a, b, this.index)),
+    ])
+  }
 }
 
 class CloudTable {
