@@ -1,6 +1,7 @@
 import { useRef } from 'react'
 import { evaluate, isExpression } from '../lib/calc'
 import { formatAmount } from '../lib/format'
+import { evaluateOwed } from '../lib/owed'
 
 /** Operator keys offered as tap targets (mobile decimal keyboards lack them). */
 const OPS = ['+', '−', '×', '÷']
@@ -12,11 +13,12 @@ const OPS = ['+', '−', '×', '÷']
  * Controlled: `value` is the raw expression string, `onChange(str)` updates it.
  * The parent commits `evaluate(value).value` (see lib/calc.js).
  */
-export default function AmountCalcInput({ value, onChange, id }) {
+export default function AmountCalcInput({ value, onChange, id, percentageBase, compact = false, inputAction }) {
   const inputRef = useRef(null)
 
-  const expression = isExpression(value)
-  const result = expression ? evaluate(value) : null
+  const supportsPercent = percentageBase !== undefined
+  const expression = isExpression(value) || (supportsPercent && String(value).includes('%'))
+  const result = expression ? (supportsPercent ? evaluateOwed(value, percentageBase) : evaluate(value)) : null
 
   function appendOp(op) {
     onChange(String(value ?? '') + op)
@@ -25,7 +27,8 @@ export default function AmountCalcInput({ value, onChange, id }) {
 
   return (
     <div>
-      <div className="flex items-center rounded-2xl border border-hairline bg-elevated px-4">
+      <div className={inputAction ? 'grid grid-cols-[minmax(0,3fr)_minmax(0,1fr)] items-stretch gap-2' : undefined}>
+      <div className="flex min-w-0 items-center rounded-2xl border border-hairline bg-elevated px-4">
         <input
           ref={inputRef}
           id={id}
@@ -36,10 +39,13 @@ export default function AmountCalcInput({ value, onChange, id }) {
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder="0,00"
-          aria-label="Amount (supports + − × ÷ calculations)"
-          className="w-full bg-transparent py-3 text-3xl font-semibold text-txt-primary placeholder:text-txt-muted focus:outline-none"
+          aria-label={supportsPercent ? 'To be paid back (supports calculations and percentages of the total)' : 'Amount (supports calculations)'}
+          className={`w-full min-w-0 bg-transparent py-3 font-semibold text-txt-primary placeholder:text-txt-muted focus:outline-none ${compact ? 'text-lg' : 'text-3xl'}`}
         />
         <span className="text-2xl font-semibold text-txt-muted">€</span>
+      </div>
+
+      {inputAction}
       </div>
 
       {/* Live evaluated result while an expression is being typed. */}
@@ -59,12 +65,11 @@ export default function AmountCalcInput({ value, onChange, id }) {
       )}
 
       {/* Operator keys — mobile decimal keyboards have no operators. */}
-      <div className="mt-2 flex gap-2" role="group" aria-label="Calculator operators">
-        {OPS.map((op) => (
+      <div className={`mt-2 flex ${compact ? 'gap-1' : 'gap-2'}`} role="group" aria-label="Calculator operators">
+        {(supportsPercent ? [...OPS, '%'] : OPS).map((op) => (
           <button
             key={op}
             type="button"
-            tabIndex={-1}
             // preventDefault keeps focus (and the keyboard) on the input.
             onPointerDown={(e) => e.preventDefault()}
             onClick={() => appendOp(op)}

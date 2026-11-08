@@ -11,6 +11,7 @@ import Onboarding from './components/onboarding/Onboarding'
 import Dashboard from './pages/Dashboard'
 import Transactions from './pages/Transactions'
 import Reminders from './pages/Reminders'
+import Owed from './pages/Owed'
 import SupabaseSignIn from './components/SupabaseSignIn'
 
 export default function App() {
@@ -154,6 +155,7 @@ export default function App() {
           />
         )}
         {activeTab === 'reminders' && <Reminders />}
+        {activeTab === 'owed' && <Owed />}
       </main>
       <BottomTabBar activeTab={activeTab} onTabChange={changeTab} />
       <Toast message={toast} onDone={clearToast} />

@@ -1,9 +1,10 @@
-import { PieChart, List, Bell } from 'lucide-react'
+import { PieChart, List, Bell, HandCoins } from 'lucide-react'
 
 const tabs = [
   { id: 'dashboard', label: 'Overview', Icon: PieChart },
   { id: 'transactions', label: 'Transactions', Icon: List },
   { id: 'reminders', label: 'Reminders', Icon: Bell },
+  { id: 'owed', label: 'Owed', Icon: HandCoins },
 ]
 
 export default function BottomTabBar({ activeTab, onTabChange }) {

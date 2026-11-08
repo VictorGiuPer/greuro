@@ -1,4 +1,5 @@
 export { db } from './db'
+export { getOwedTransactions, getOwedNameSuggestions, resolveOwedTransactions, undoOwedResolution } from './owed'
 export { seedIfEmpty } from './seed'
 export {
   SETTINGS_DEFAULTS,

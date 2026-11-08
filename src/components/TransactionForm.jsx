@@ -7,16 +7,17 @@ import {
   addAccount,
   addCategory,
   getDescriptionSuggestions,
+  getOwedNameSuggestions,
   accountUsage,
 } from '../db'
 import {
   toDateInputValue,
   fromDateInputValue,
   toAmountInputValue,
-  parseAmountInput,
   formatAmount,
 } from '../lib/format'
 import { evaluate } from '../lib/calc'
+import { evaluateOwed } from '../lib/owed'
 import SegmentedPill from './SegmentedPill'
 import Sheet from './ui/Sheet'
 import Select from './ui/Select'
@@ -87,6 +88,8 @@ export default function TransactionForm({
   const [mini, setMini] = useState(null)
   // Autofill memory: recent distinct descriptions matching what's typed.
   const [suggestions, setSuggestions] = useState([])
+  const [owedSuggestions, setOwedSuggestions] = useState([])
+  const appliedOwedRef = useRef('')
   // The "Optional" disclosure (trip + paid-back) — collapsed unless in use.
   const [optionalOpen, setOptionalOpen] = useState(false)
   // Description value we last prefilled/loaded — suppresses re-suggesting it.
@@ -110,6 +113,8 @@ export default function TransactionForm({
     setConfirmDelete(false)
     setMini(null)
     setSuggestions([])
+    setOwedSuggestions([])
+    appliedOwedRef.current = editingTx?.paidBackNote || ''
     // Auto-expand when the row already uses an optional tag, so it's visible.
     setOptionalOpen(Boolean(base.tripId) || Boolean(base.reimbursable))
     appliedDescRef.current = editingTx?.description || ''
@@ -134,6 +139,24 @@ export default function TransactionForm({
       clearTimeout(t)
     }
   }, [form.description, open, mini])
+
+  useEffect(() => {
+    const note = form.paidBackNote.trim()
+    if (!open || mini || !form.reimbursable || note.length < 2 || note === appliedOwedRef.current) {
+      setOwedSuggestions([])
+      return
+    }
+    let active = true
+    const timer = setTimeout(async () => {
+      try {
+        const names = await getOwedNameSuggestions(note)
+        if (active) setOwedSuggestions(names)
+      } catch {
+        if (active) setOwedSuggestions([])
+      }
+    }, 150)
+    return () => { active = false; clearTimeout(timer) }
+  }, [form.paidBackNote, form.reimbursable, open, mini])
 
   // Prefill everything except the amount from a remembered transaction.
   function applySuggestion(s) {
@@ -163,7 +186,7 @@ export default function TransactionForm({
   // set (not a running "paid so far" tally) — netting only happens once
   // `resolved` is explicitly toggled.
   const amountValue = useMemo(() => evaluate(form.amount).value ?? 0, [form.amount])
-  const owedValue = useMemo(() => parseAmountInput(form.owedAmount) || 0, [form.owedAmount])
+  const owedValue = useMemo(() => evaluateOwed(form.owedAmount, amountValue).value ?? 0, [form.owedAmount, amountValue])
   const netPreview = form.resolved ? Math.max(0, amountValue - owedValue) : amountValue
 
   function toggleResolved() {
@@ -227,8 +250,9 @@ export default function TransactionForm({
       if (!form.categoryId && !isAdjustment) return 'Choose a category.'
     }
     if (form.type === 'expense' && form.reimbursable && form.owedAmount.trim()) {
-      const owed = parseAmountInput(form.owedAmount)
-      if (!Number.isFinite(owed) || owed < 0) return 'Enter a valid amount to be paid back.'
+      const result = evaluateOwed(form.owedAmount, res.value)
+      const owed = result.value
+      if (result.error || result.incomplete || owed < 0) return 'Enter a valid amount to be paid back.'
       if (owed > res.value) return 'Amount to be paid back can’t exceed the total.'
     }
     return ''
@@ -254,7 +278,7 @@ export default function TransactionForm({
       tripId: form.type === 'transfer' || !form.tripId ? null : Number(form.tripId),
       // Paid-back tag (normalize() drops these for non-expenses).
       reimbursable: form.type === 'expense' && form.reimbursable ? 1 : 0,
-      owedAmount: form.owedAmount.trim() ? parseAmountInput(form.owedAmount) || 0 : 0,
+      owedAmount: form.owedAmount.trim() ? owedValue : 0,
       paidBackNote: form.paidBackNote,
       resolved: form.reimbursable && form.resolved ? 1 : 0,
       // Preserve the adjustment flag across edits.
@@ -264,6 +288,8 @@ export default function TransactionForm({
       if (isEdit) await updateTransaction(editingTx.id, payload)
       else await addTransaction(payload)
       onSaved()
+    } catch (error) {
+      setError(error.message || 'Could not save the transaction. Please try again.')
     } finally {
       setSaving(false)
     }
@@ -559,33 +585,26 @@ export default function TransactionForm({
                             >
                               To be paid back
                             </label>
-                            <div className="flex items-center gap-2">
-                              <div className="flex min-w-0 flex-1 items-center rounded-2xl border border-hairline bg-card px-4">
-                                <input
-                                  id="tx-owed-amount"
-                                  type="text"
-                                  inputMode="decimal"
-                                  autoComplete="off"
-                                  value={form.owedAmount}
-                                  onChange={(e) => set({ owedAmount: e.target.value })}
-                                  placeholder="0,00"
-                                  className="w-full min-w-0 bg-transparent py-3 text-txt-primary placeholder:text-txt-muted focus:outline-none"
-                                />
-                                <span className="text-lg text-txt-muted">€</span>
-                              </div>
-                              <button
+                            <AmountCalcInput
+                              id="tx-owed-amount"
+                              value={form.owedAmount}
+                              onChange={(value) => set({ owedAmount: value })}
+                              percentageBase={amountValue}
+                              compact
+                              inputAction={<button
                                 type="button"
                                 onClick={toggleResolved}
                                 aria-pressed={form.resolved}
-                                className={`shrink-0 rounded-2xl border px-3.5 py-3 text-sm font-semibold transition-colors ${
+                                className={`min-w-0 rounded-2xl border px-1 py-3 text-xs font-semibold transition-colors ${
                                   form.resolved
                                     ? 'border-accent/60 bg-accent/15 text-accent'
                                     : 'border-hairline bg-card text-txt-secondary hover:text-txt-primary'
                                 }`}
                               >
                                 Resolved
-                              </button>
-                            </div>
+                              </button>}
+                            />
+                            <p className="mt-2 text-xs text-txt-muted">Percentages use the transaction total: 20% of 100 is 20.</p>
                           </div>
                           <div>
                             <label
@@ -602,6 +621,21 @@ export default function TransactionForm({
                               placeholder="e.g. Marc, work expenses"
                               className="w-full rounded-2xl border border-hairline bg-card px-4 py-3 text-txt-primary placeholder:text-txt-muted focus:outline-none focus:ring-1 focus:ring-accent/50"
                             />
+                            {owedSuggestions.length > 0 && (
+                              <div className="mt-2 flex flex-wrap gap-1.5" aria-label="Remembered people and notes">
+                                {owedSuggestions.map((name) => (
+                                  <button key={name} type="button"
+                                    onClick={() => {
+                                      appliedOwedRef.current = name
+                                      setOwedSuggestions([])
+                                      set({ paidBackNote: name })
+                                    }}
+                                    className="min-h-[44px] max-w-full rounded-full border border-accent/40 bg-accent/10 px-3 py-1.5 text-left text-xs text-accent break-words"
+                                  >{name}</button>
+                                ))}
+                              </div>
+                            )}
+
                           </div>
                           <p className="text-xs leading-snug text-txt-muted">
                             {form.resolved
