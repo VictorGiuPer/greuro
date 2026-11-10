@@ -1,3 +1,4 @@
+import { budgetAction, readBudget } from './budgetActions'
 import { db } from './db'
 import { outstandingAmount } from '../lib/txAmount'
 
@@ -35,6 +36,8 @@ function normalize(data) {
     // Balance corrections: still move the account balance, but are excluded
     // from every income / expense / cash-flow statistic.
     isAdjustment: data.isAdjustment ? 1 : 0,
+    goalId: data.goalId ? Number(data.goalId) : null,
+    refundOfTransactionId: data.refundOfTransactionId ? Number(data.refundOfTransactionId) : null,
   }
   if (type === 'transfer') {
     base.fromAccountId = data.fromAccountId ?? null
@@ -54,13 +57,17 @@ function normalize(data) {
   return base
 }
 
-export async function addTransaction(data) {
+export async function addTransaction(data, options = {}) {
+  const budget = await readBudget()
+  if (data.goalId || data.refundOfTransactionId || budget.goals.some((g) => g.modelVersion === 2)) return (await budgetAction('transaction.add', { ...normalize(data), releases: options.releases }, options)).id
   const now = Date.now()
   const row = { ...normalize(data), createdAt: now, updatedAt: now }
   return db.transactions.add(row)
 }
 
-export async function updateTransaction(id, patch) {
+export async function updateTransaction(id, patch, options = {}) {
+  const budget = await readBudget()
+  if (budget.goals.some((g) => g.modelVersion === 2)) return budgetAction('transaction.update', { id, fields: patch, releases: options.releases }, options)
   const existing = await db.transactions.get(id)
   if (!existing) return
   // Re-normalize the merged record so a type change clears stale fields.
@@ -68,7 +75,9 @@ export async function updateTransaction(id, patch) {
   return db.transactions.update(id, { ...merged, updatedAt: Date.now() })
 }
 
-export async function deleteTransaction(id) {
+export async function deleteTransaction(id, options = {}) {
+  const budget = await readBudget()
+  if (budget.goals.some((g) => g.modelVersion === 2)) return budgetAction('transaction.delete', { id, releases: options.releases }, options)
   return db.transactions.delete(id)
 }
 

@@ -4,7 +4,9 @@ import { createMcpHandler, McpServer } from 'npm:@modelcontextprotocol/server@^2
 import { pipeline } from 'npm:@supabase/middleware@1'
 import { withOAuthProtectedResource, withSupabase } from 'npm:@supabase/server@1'
 import { z } from 'npm:zod@^4.3.6'
-import { registerTransactionTools } from './transactionTools.ts'
+import { registerBudgetTools } from './budgetTools.ts'
+import { validateSavings } from '../../../src/lib/budgetDomain.js'
+import { savingsPool } from '../../../src/lib/savings.js'
 
 const budgetSnapshotSchema = z.object({
   format: z.literal('budget-app-backup'),
@@ -16,8 +18,8 @@ const budgetSnapshotSchema = z.object({
     transactions: z.array(z.unknown()),
     scheduled: z.array(z.unknown()),
     settings: z.array(z.unknown()),
-    goals: z.array(z.unknown()),
-    trips: z.array(z.unknown()),
+    goals: z.array(z.unknown()).default([]),
+    trips: z.array(z.unknown()).default([]),
   }).strict(),
 }).strict()
 
@@ -61,16 +63,22 @@ Deno.serve(
           {
             title: 'Update my Greuro budget',
             description: "Restore the signed-in user's Greuro budget snapshot from a complete version-1 backup. Prefer the granular transaction tools for individual changes. Use get_budget_data first and preserve unrelated records. This can change or remove individual budget records, but cannot delete the database or its table.",
-            inputSchema: z.object({ budget: budgetSnapshotSchema }),
+            inputSchema: z.object({ budget: budgetSnapshotSchema, expectedUpdatedAt: z.string().nullable() }),
             annotations: { readOnlyHint: false, destructiveHint: true },
           },
-          async ({ budget }) => {
+          async ({ budget, expectedUpdatedAt }) => {
             const { data: current, error: readError } = await supabase
               .from('budget_backups')
               .select('data, updated_at')
               .maybeSingle()
 
             if (readError) throw new Error(`Could not check the current Greuro budget: ${readError.message}`)
+
+            if (expectedUpdatedAt !== (current?.updated_at ?? null)) throw new Error('Budget changed. Read again before restoring.')
+            validateSavings(budget.data)
+            if (savingsPool(budget.data).shortfall > 0 && savingsPool(budget.data).earmarked > 0) {
+              budget.data.settings = [...budget.data.settings.filter((s: any) => s.key !== 'savingsResolutionRequired'), { key: 'savingsResolutionRequired', value: true }]
+            }
 
             const tables = Object.values(budget.data)
             const currentTables = Object.values(current?.data?.data ?? {})
@@ -96,7 +104,7 @@ Deno.serve(
           },
         )
 
-        registerTransactionTools(server, supabase)
+        registerBudgetTools(server, supabase)
         return server
       })
 

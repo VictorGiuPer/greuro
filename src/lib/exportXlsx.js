@@ -1,3 +1,5 @@
+import { readBudget } from '../db/budgetActions'
+import { goalProgress, savingsPool, allocationHistory } from './savings'
 import { db } from '../db/db'
 import { accountBalances } from '../db/derive'
 import { formatDate } from './format'
@@ -48,16 +50,20 @@ function txRow(t, categoriesById, accountsById) {
     cat,
     t.type === 'transfer' ? `${from} → ${to}` : acct,
     signedValue(t),
+    t.tripId ?? null,
+    t.goalId ?? null,
+    t.fundedAmount ?? 0,
+    t.refundOfTransactionId ?? null,
   ]
 }
 
-const TX_HEADER = ['Date', 'Type', 'Description', 'Category', 'Account', 'Amount']
+const TX_HEADER = ['Date', 'Type', 'Description', 'Category', 'Account', 'Amount', 'Trip ID', 'Goal ID', 'Reserve used', 'Refund of transaction']
 
 function buildTxSheet(XLSX, txs, categoriesById, accountsById) {
   const rows = txs.map((t) => txRow(t, categoriesById, accountsById))
   const ws = XLSX.utils.aoa_to_sheet([TX_HEADER, ...rows])
-  ws['!cols'] = [{ wch: 11 }, { wch: 9 }, { wch: 28 }, { wch: 16 }, { wch: 22 }, { wch: 12 }]
-  applyEuroFormat(XLSX, ws, [5], rows.length)
+  ws['!cols'] = [{ wch: 11 }, { wch: 9 }, { wch: 28 }, { wch: 16 }, { wch: 22 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 20 }]
+  applyEuroFormat(XLSX, ws, [5, 8], rows.length)
   return ws
 }
 
@@ -162,6 +168,24 @@ export async function exportAllWorkbook() {
   wsAccts['!cols'] = [{ wch: 18 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 12 }]
   applyEuroFormat(XLSX, wsAccts, [2, 3, 4], acctRows.length)
   XLSX.utils.book_append_sheet(wb, wsAccts, 'By Account')
+
+  const data = await readBudget()
+  const goalRows = data.goals.map((goal) => {
+    const p = goalProgress(goal, data)
+    return [goal.id, goal.name, goal.archived ? 'Archived' : 'Active', p.reviewRequired ? 'Review required' : 'Reviewed', p.target, p.spent, p.earmarked, p.remaining, p.overrun]
+  })
+  const allocationRows = allocationHistory(data).map((r) => [r.key, r.income, r.expenses, r.investments, r.savings, r.percentages?.expenses ?? null, r.percentages?.investments ?? null, r.percentages?.savings ?? null])
+  const wsAllocation = XLSX.utils.aoa_to_sheet([['Month', 'Income', 'Expenses', 'Investments', 'Savings', 'Expenses %', 'Investments %', 'Savings %'], ...allocationRows])
+  applyEuroFormat(XLSX, wsAllocation, [1, 2, 3, 4], allocationRows.length)
+  XLSX.utils.book_append_sheet(wb, wsAllocation, 'Monthly Allocation')
+  const wsGoals = XLSX.utils.aoa_to_sheet([['ID', 'Goal', 'Status', 'Savings model', 'Target', 'Spent', 'Reserved', 'To fund', 'Over target'], ...goalRows])
+  applyEuroFormat(XLSX, wsGoals, [4, 5, 6, 7, 8], goalRows.length)
+  XLSX.utils.book_append_sheet(wb, wsGoals, 'Savings Goals')
+  const pool = savingsPool(data)
+  const wsPool = XLSX.utils.aoa_to_sheet([['Everyday money', 'Amount'], ['Total', pool.pooled], ['Reserved', pool.earmarked], ['Available', pool.available], ['Shortfall', pool.shortfall]])
+  applyEuroFormat(XLSX, wsPool, [1], 4)
+  XLSX.utils.book_append_sheet(wb, wsPool, 'Savings Pool')
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['ID', 'Trip', 'Days', 'Goal ID', 'Archived'], ...data.trips.map((t) => [t.id, t.name, t.days, t.goalId ?? null, Boolean(t.archived)])]), 'Trips')
 
   download(XLSX, wb, `budget-export-${new Date().toISOString().slice(0, 10)}.xlsx`)
 }

@@ -1,4 +1,4 @@
-import { addMonthsClamped, todayNoon } from './dates'
+import { addMonthsClamped, todayNoon } from './dates.js'
 
 /**
  * Forward INVESTMENT projection — ASSUMPTIONS, NOT PREDICTIONS.
@@ -69,7 +69,7 @@ function project({ accounts, startBalances, months, spreadSign, spread, monthlyI
  * @returns Array<{ ts, base, pess, opt, range:[pess,opt] }> — monthly points
  *          (pess = worst, opt = best; inflation-discounted when enabled)
  */
-export function projectBands({ accounts, startBalances, horizonYears, settings }) {
+export function projectBands({ accounts, startBalances, horizonYears, settings, startAt }) {
   const months = horizonYears * MONTHS_PER_YEAR
   const spread = Math.max(0, Number(settings.forecastBandSpread) || 0)
   const monthlyInvestment = Math.max(0, Number(settings.monthlyInvestment) || 0)
@@ -87,7 +87,7 @@ export function projectBands({ accounts, startBalances, horizonYears, settings }
   const inflMonthly = settings.inflationAdjust
     ? Math.pow(1 + (Number(settings.inflationRate) || 0) / 100, 1 / MONTHS_PER_YEAR)
     : 1
-  const start = todayNoon()
+  const start = startAt ?? todayNoon()
 
   const points = []
   let discount = 1

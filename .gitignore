@@ -6,3 +6,6 @@ dist-ssr
 .DS_Store
 npm-debug.log*
 supabase/.temp/
+
+# Local verification caches and screenshots
+.test-tmp/

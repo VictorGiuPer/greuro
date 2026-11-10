@@ -21,7 +21,7 @@ export default function Sheet({ open, onClose, label, children }) {
         aria-label={label}
         aria-hidden={open ? undefined : 'true'}
         className={`fixed inset-x-0 bottom-0 z-[70] mx-auto w-full max-w-[430px] rounded-t-[24px] border-t border-hairline bg-card transition-transform duration-300 ${
-          open ? 'translate-y-0' : 'pointer-events-none translate-y-full'
+          open ? 'overlay-open translate-y-0' : 'overlay-closed pointer-events-none translate-y-full'
         }`}
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >

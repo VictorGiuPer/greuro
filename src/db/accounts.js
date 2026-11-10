@@ -1,3 +1,4 @@
+import { budgetAction, readBudget } from './budgetActions'
 import { db } from './db'
 import { accountBalances } from './derive'
 import { addTransaction } from './transactions'
@@ -25,10 +26,10 @@ export function getAccounts() {
  * Count transactions that reference an account in ANY position
  * (accountId for expense/income, fromAccountId/toAccountId for transfers).
  */
-export function countAccountUsage(id) {
-  return db.transactions
-    .filter((t) => t.accountId === id || t.fromAccountId === id || t.toAccountId === id)
-    .count()
+export async function countAccountUsage(id) {
+  const references = (t) => t.accountId === id || t.fromAccountId === id || t.toAccountId === id
+  const [transactions, scheduled] = await Promise.all([db.transactions.filter(references).count(), db.scheduled.filter(references).count()])
+  return transactions + scheduled
 }
 
 export async function addAccount(data) {
@@ -52,6 +53,10 @@ export async function updateAccount(id, patch) {
   if (patch.startingBalance != null) clean.startingBalance = Number(patch.startingBalance) || 0
   if (patch.expectedAnnualReturn != null)
     clean.expectedAnnualReturn = Number(patch.expectedAnnualReturn) || 0
+  if ((await readBudget()).goals.some((g) => g.modelVersion === 2)) {
+    const { updatedAt, ...fields } = clean
+    return budgetAction('account.update', { id, fields })
+  }
   return db.accounts.update(id, clean)
 }
 
@@ -96,6 +101,7 @@ export async function setAccountBalance(accountId, newBalance) {
 export async function deleteAccount(id) {
   const count = await countAccountUsage(id)
   if (count > 0) return { ok: false, count }
-  await db.accounts.delete(id)
+  if ((await readBudget()).goals.some((g) => g.modelVersion === 2)) await budgetAction('account.delete', { id })
+  else await db.accounts.delete(id)
   return { ok: true }
 }

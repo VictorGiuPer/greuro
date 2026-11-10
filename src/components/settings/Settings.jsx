@@ -1,3 +1,8 @@
+import GoalEditorSheet from '../savings/GoalEditorSheet'
+import { db } from '../../db/db'
+import ReleasePanel from '../savings/ReleasePanel'
+import { budgetAction, readBudget } from '../../db/budgetActions'
+import { savingsPool } from '../../lib/savings'
 import { useEffect, useState } from 'react'
 import {
   ArrowLeft,
@@ -7,7 +12,6 @@ import {
   FileJson,
   Upload,
   Sprout,
-  Trash2,
   Plane,
   LogOut,
   Link2,
@@ -30,7 +34,6 @@ import {
   setAccountBalance,
   getTrips,
 } from '../../db'
-import { wipeAllData } from '../../db/maintenance'
 import { exportBackupFile } from '../../db/backup'
 import { exportAllWorkbook } from '../../lib/exportXlsx'
 import { formatAmount, formatDate, parseAmountInput, toAmountInputValue } from '../../lib/format'
@@ -39,8 +42,6 @@ import InstallAppButton from '../InstallAppButton'
 import AccountForm from './AccountForm'
 import CategoryForm from './CategoryForm'
 import ImportJson from './ImportJson'
-import BlueCoinsImport from './BlueCoinsImport'
-import RusselsheimWorkbookImport from './RusselsheimWorkbookImport'
 import TripForm from '../TripForm'
 import { hasPendingJsonRestore } from '../../lib/restoreIntent'
 
@@ -52,20 +53,25 @@ import { hasPendingJsonRestore } from '../../lib/restoreIntent'
  */
 export default function Settings({ open, onClose, accounts, categories, onChanged, user, onSignOut }) {
   // editor = null | { type:'account'|'category', item: object|null }
+  const [releaseConflict, setReleaseConflict] = useState(null)
+  const [pendingAccount, setPendingAccount] = useState(null)
   const [editor, setEditor] = useState(null)
   // Preferences form (strings; German comma decimals allowed).
   const [prefs, setPrefs] = useState(null)
   const [prefsNote, setPrefsNote] = useState('')
   // Data-management state.
-  const [dataView, setDataView] = useState(() => (hasPendingJsonRestore() ? 'json' : null)) // null | 'json' | 'bluecoins' | 'russelsheim'
+  const [dataView, setDataView] = useState(() => (hasPendingJsonRestore() ? 'json' : null)) // null | 'json'
   const [dataNote, setDataNote] = useState('')
-  const [wipeText, setWipeText] = useState('')
   const [busy, setBusy] = useState(false)
   const [lastBackupAt, setLastBackupAt] = useState(null)
   const [mainAccountId, setMainAccountId] = useState(null)
   // Derived current balances (accountId -> signed balance) for the list + form.
+  const [pool, setPool] = useState(null)
   const [balances, setBalances] = useState(null)
   // Trips
+  const [goalBudget, setGoalBudget] = useState(null)
+  const [goalFormOpen, setGoalFormOpen] = useState(false)
+  const [editingGoalId, setEditingGoalId] = useState(null)
   const [tripList, setTripList] = useState([])
   const [tripFormOpen, setTripFormOpen] = useState(false)
   const [editingTrip, setEditingTrip] = useState(null)
@@ -80,10 +86,11 @@ export default function Settings({ open, onClose, accounts, categories, onChange
     setDataView(hasPendingJsonRestore() ? 'json' : null)
     setDataNote('')
     setPrefsNote('')
-    setWipeText('')
     setTripFormOpen(false)
+    setGoalFormOpen(false)
     getTrips().then(setTripList)
     accountBalances().then(setBalances)
+    readBudget().then((data) => { setPool(savingsPool(data)); setGoalBudget(data) })
     getSettings().then((s) => {
       setLastBackupAt(s.lastBackupAt)
       setMainAccountId(s.mainAccountId)
@@ -163,46 +170,44 @@ export default function Settings({ open, onClose, accounts, categories, onChange
     }
   }
 
-  async function handleWipe() {
-    setBusy(true)
-    try {
-      await wipeAllData()
-      setWipeText('')
-      setDataNote('All data erased.')
-      await onChanged()
-    } finally {
-      setBusy(false)
-    }
-  }
-
   async function handleTripSaved() {
     setTripFormOpen(false)
     setTripList(await getTrips())
+    const data = await readBudget()
+    setGoalBudget(data)
+    setPool(savingsPool(data))
+    await onChanged()
+  }
+
+  async function handleGoalSaved() {
+    const data = await readBudget()
+    setGoalBudget(data)
+    setTripList(data.trips)
+    setPool(savingsPool(data))
     await onChanged()
   }
 
   const expenseCats = categories.filter((c) => c.kind === 'expense')
   const incomeCats = categories.filter((c) => c.kind === 'income')
 
-  async function submitAccount(data) {
-    const id = editor.item ? editor.item.id : await addAccount(data)
-    if (editor.item) await updateAccount(editor.item.id, data)
-    // Correct the balance AFTER the field save, so a starting-balance edit is
-    // already reflected when the adjustment delta is computed.
-    if (data.currentBalance !== undefined) {
-      await setAccountBalance(id, data.currentBalance)
+  async function submitAccount(data, releases = []) {
+    try {
+      await db.transaction('rw', db.tables, async () => {
+        if (releases.length) await budgetAction('pool.resolve', { releases })
+        const id = editor.item ? editor.item.id : await addAccount(data)
+        if (editor.item) await updateAccount(editor.item.id, data)
+        if (data.currentBalance !== undefined) await setAccountBalance(id, data.currentBalance)
+        if (data.isMain === true) { await setSetting('mainAccountId', id); setMainAccountId(id) }
+        else if (data.isMain === false && mainAccountId === id) { await setSetting('mainAccountId', null); setMainAccountId(null) }
+      })
       setBalances(await accountBalances())
+      setPool(savingsPool(await readBudget()))
+      await onChanged()
+      setEditor(null); setReleaseConflict(null); setPendingAccount(null)
+    } catch (e) {
+      if (e.code === 'RELEASE_REQUIRED') { setReleaseConflict(e.details); setPendingAccount(data) }
+      throw e
     }
-    // Persist the "main account" tag (a single-value setting).
-    if (data.isMain === true) {
-      await setSetting('mainAccountId', id)
-      setMainAccountId(id)
-    } else if (data.isMain === false && mainAccountId === id) {
-      await setSetting('mainAccountId', null)
-      setMainAccountId(null)
-    }
-    await onChanged()
-    setEditor(null)
   }
 
   async function onDeleteAccount() {
@@ -258,6 +263,7 @@ export default function Settings({ open, onClose, accounts, categories, onChange
       </header>
 
       <div className="flex-1 overflow-y-auto px-4 pb-10 pt-4">
+        {releaseConflict && <ReleasePanel conflict={releaseConflict} onCancel={() => setReleaseConflict(null)} onConfirm={(releases) => submitAccount(pendingAccount, releases)} />}
         {editor ? (
           editor.type === 'account' ? (
             <AccountForm
@@ -325,6 +331,10 @@ export default function Settings({ open, onClose, accounts, categories, onChange
               </div>
             </Section>
 
+            {pool && <section className="mb-8 rounded-card border border-hairline bg-card p-4" aria-label="Shared savings pool">
+              <h2 className="mb-2 text-sm font-medium text-txt-secondary">Everyday money</h2>
+              <div className="space-y-1 text-sm"><p>Total {pool.pooled < 0 ? '−' : ''}{formatAmount(pool.pooled)}</p><p>Reserved {formatAmount(pool.earmarked)}</p><p>Available {pool.available < 0 ? '−' : ''}{formatAmount(pool.available)}</p></div>
+            </section>}
             {/* Categories */}
             <Section
               title="Categories"
@@ -344,7 +354,9 @@ export default function Settings({ open, onClose, accounts, categories, onChange
                 setTripFormOpen(true)
               }}
             >
-              <div className="overflow-hidden rounded-card border border-hairline bg-card">
+              <details className="overflow-hidden rounded-card border border-hairline bg-card">
+                <summary className="cursor-pointer px-4 py-3 text-sm text-txt-secondary">See trips ({tripList.length})</summary>
+                <div className="border-t border-hairline">
                 {tripList.length === 0 && <Empty>No trips yet.</Empty>}
                 {tripList.map((t, i) => (
                   <Row
@@ -372,7 +384,21 @@ export default function Settings({ open, onClose, accounts, categories, onChange
                     }
                   />
                 ))}
-              </div>
+                </div>
+              </details>
+            </Section>
+
+            <Section title="Savings goals" actionLabel="Add Goal" onAction={() => { setEditingGoalId(null); setGoalFormOpen(true) }}>
+              <details className="overflow-hidden rounded-card border border-hairline bg-card">
+                <summary className="cursor-pointer px-4 py-3 text-sm text-txt-secondary">See savings goals ({goalBudget?.goals.length ?? 0})</summary>
+                <div className="border-t border-hairline">
+                  {goalBudget?.goals.length === 0 && <Empty>No savings goals yet.</Empty>}
+                  {goalBudget?.goals.map((g, i) => <Row key={g.id} divider={i > 0} onClick={() => { setEditingGoalId(g.id); setGoalFormOpen(true) }} left={<div>
+                    <div className="flex items-center gap-2"><span className="font-medium text-txt-primary">{g.name}</span>{g.archived ? <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-txt-secondary">Archived</span> : null}</div>
+                    <div className="text-sm text-txt-secondary">Target {formatAmount(g.targetAmount)} · Reserved {formatAmount(g.earmarked)}</div>
+                  </div>} />)}
+                </div>
+              </details>
             </Section>
 
             {/* Preferences */}
@@ -460,22 +486,6 @@ export default function Settings({ open, onClose, accounts, categories, onChange
                   divider
                 />
                 <DataRow
-                  icon={Upload}
-                  title="Import from BlueCoins"
-                  subtitle="CSV / XLSX with column mapping & preview"
-                  onClick={() => setDataView('bluecoins')}
-                  disabled={busy}
-                  divider
-                />
-                <DataRow
-                  icon={Upload}
-                  title="Import monthly budget workbook"
-                  subtitle="German Miete / Einkaufen / Mensa / Rest layout"
-                  onClick={() => setDataView('russelsheim')}
-                  disabled={busy}
-                  divider
-                />
-                <DataRow
                   icon={LogOut}
                   title="Sign out"
                   subtitle={user?.email || 'Supabase account'}
@@ -486,7 +496,7 @@ export default function Settings({ open, onClose, accounts, categories, onChange
                 <DataRow
                   icon={Sprout}
                   title="Load sample data"
-                  subtitle="Only when the app is empty, wipe to remove"
+                  subtitle="Only available when the app is empty"
                   onClick={handleLoadSample}
                   disabled={busy}
                   divider
@@ -494,33 +504,6 @@ export default function Settings({ open, onClose, accounts, categories, onChange
               </div>
               {dataNote && <p className="mt-2 px-1 text-sm text-accent">{dataNote}</p>}
 
-              {/* Danger zone */}
-              <div className="mt-4 rounded-card border border-expense/30 bg-card p-4">
-                <h3 className="mb-1 flex items-center gap-2 text-sm font-semibold text-expense">
-                  <Trash2 size={15} />
-                  Erase all data
-                </h3>
-                <p className="mb-3 text-xs text-txt-muted">
-                  Deletes every account, category, transaction, reminder and setting from your
-                  Supabase account. There is no undo. Export a backup first.
-                </p>
-                <div className="flex gap-2">
-                  <input
-                    value={wipeText}
-                    onChange={(e) => setWipeText(e.target.value)}
-                    placeholder='Type "delete" to confirm'
-                    aria-label="Type delete to confirm erasing all data"
-                    className="min-w-0 flex-1 rounded-xl border border-hairline bg-elevated px-3 py-2 text-sm text-txt-primary placeholder:text-txt-muted focus:outline-none"
-                  />
-                  <button
-                    onClick={handleWipe}
-                    disabled={busy || wipeText.trim().toLowerCase() !== 'delete'}
-                    className="rounded-xl bg-expense px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
-                  >
-                    Erase
-                  </button>
-                </div>
-              </div>
             </section>
 
             {/* MCP connection */}
@@ -599,16 +582,7 @@ export default function Settings({ open, onClose, accounts, categories, onChange
         onClose={() => setDataView(null)}
         onImported={onChanged}
       />
-      <BlueCoinsImport
-        open={dataView === 'bluecoins'}
-        onClose={() => setDataView(null)}
-        onImported={onChanged}
-      />
-      <RusselsheimWorkbookImport
-        open={dataView === 'russelsheim'}
-        onClose={() => setDataView(null)}
-        onImported={onChanged}
-      />
+      {goalBudget && <GoalEditorSheet open={goalFormOpen} goal={goalBudget.goals.find((g) => g.id === editingGoalId)} data={goalBudget} onClose={() => setGoalFormOpen(false)} onSaved={handleGoalSaved} />}
       <TripForm
         open={tripFormOpen}
         onClose={() => setTripFormOpen(false)}

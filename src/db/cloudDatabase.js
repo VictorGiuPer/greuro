@@ -1,3 +1,4 @@
+import { validateSavings, ensureCoverage } from '../lib/budgetDomain.js'
 import { supabase } from '../lib/supabase'
 
 export const CLOUD_TABLES = [
@@ -171,7 +172,7 @@ export class CloudDatabase {
     const before = this.transactionDepth === 0 ? clone(this.data) : null
     const result = action()
     if (this.transactionDepth === 0) {
-      try { await this.persist() } catch (error) { this.data = before; throw error }
+      try { validateSavings(this.data); ensureCoverage(before, this.data, this.data.settings.some((s) => s.key === 'savingsResolutionRequired' && s.value === true)); await this.persist() } catch (error) { this.data = before; throw error }
     }
     return result
   }
@@ -189,7 +190,11 @@ export class CloudDatabase {
     try {
       const result = await operation()
       this.transactionDepth = 0
-      if (JSON.stringify(before) !== JSON.stringify(this.data)) await this.persist()
+      if (JSON.stringify(before) !== JSON.stringify(this.data)) {
+        validateSavings(this.data)
+        ensureCoverage(before, this.data, this.data.settings.some((s) => s.key === 'savingsResolutionRequired' && s.value === true))
+        await this.persist()
+      }
       return result
     } catch (error) {
       this.transactionDepth = 0
@@ -208,6 +213,7 @@ export class CloudDatabase {
     if (error) throw new Error(error.message || 'Could not save to Supabase.')
     if (!data) throw new Error('Supabase did not confirm that the budget was saved.')
     this.updatedAt = data
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('budget-changed'))
   }
 }
 

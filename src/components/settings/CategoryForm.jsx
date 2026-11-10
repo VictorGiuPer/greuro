@@ -51,6 +51,8 @@ export default function CategoryForm({ category, defaultKind = 'expense', onSubm
     setBusy(true)
     try {
       await onSubmit({ name, kind, color, icon, excludeFromStats })
+    } catch (e) {
+      setError(e.message || 'Could not save this category.')
     } finally {
       setBusy(false)
     }
@@ -68,6 +70,8 @@ export default function CategoryForm({ category, defaultKind = 'expense', onSubm
         setBlockedCount(res.count)
         setConfirmDelete(false)
       }
+    } catch (e) {
+      setError(e.message || 'Could not save this category.')
     } finally {
       setBusy(false)
     }

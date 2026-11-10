@@ -1,5 +1,5 @@
-import { evaluate } from './calc'
-import { outstandingAmount } from './txAmount'
+import { evaluate } from './calc.js'
+import { outstandingAmount } from './txAmount.js'
 
 export const owedName = (note) => String(note ?? '').trim().replace(/\s+/g, ' ')
 export const owedKey = (note) => owedName(note).toLowerCase()

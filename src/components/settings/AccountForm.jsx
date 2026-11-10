@@ -76,6 +76,8 @@ export default function AccountForm({
         expectedAnnualReturn: parseAmountInput(expectedAnnualReturn) || 0,
         currentBalance: currentDirty ? currentValue : undefined,
       })
+    } catch (e) {
+      setError(e.message || 'Could not save this account.')
     } finally {
       setBusy(false)
     }
@@ -93,6 +95,8 @@ export default function AccountForm({
         setBlockedCount(res.count)
         setConfirmDelete(false)
       }
+    } catch (e) {
+      setError(e.message || 'Could not save this account.')
     } finally {
       setBusy(false)
     }

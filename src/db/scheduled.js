@@ -1,3 +1,4 @@
+import { budgetAction } from './budgetActions'
 import { db } from './db'
 import { addDays, addMonthsClamped, todayNoon } from '../lib/dates'
 
@@ -14,6 +15,8 @@ function normalizeScheduled(data) {
   const type = data.type
   const base = {
     type,
+    goalId: data.goalId ? Number(data.goalId) : null,
+    tripId: data.tripId ? Number(data.tripId) : null,
     amount: Number(data.amount),
     description: (data.description ?? '').trim(),
     categoryId: null,
@@ -110,7 +113,7 @@ export function postDueScheduled(now = todayNoon()) {
 
 async function runAutoPost(now) {
   let posted = 0
-  await db.transaction('rw', db.scheduled, db.transactions, async () => {
+  await db.transaction('rw', db.tables, async () => {
     const due = await db.scheduled
       .where('nextDueDate')
       .belowOrEqual(now)
@@ -122,7 +125,7 @@ async function runAutoPost(now) {
       let next = item.nextDueDate
       let last = item.lastPostedDate
       while (next <= now) {
-        await db.transactions.add({
+        const row = {
           type: item.type,
           amount: item.amount,
           date: next,
@@ -133,7 +136,11 @@ async function runAutoPost(now) {
           toAccountId: item.toAccountId,
           createdAt: stamp,
           updatedAt: stamp,
-        })
+        }
+        if (item.goalId) row.goalId = item.goalId
+        if (item.tripId) row.tripId = item.tripId
+        if ((await db.goals.toArray()).some((g) => g.modelVersion === 2)) await budgetAction('transaction.add', row, { allowShortfall: true })
+        else await db.transactions.add(row)
         posted += 1
         last = next
         const advanced = advanceDueDate({ ...item, nextDueDate: next })

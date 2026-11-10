@@ -1,3 +1,6 @@
+import { applyBudgetAction } from '../lib/budgetDomain'
+import { readBudget } from '../db/budgetActions'
+import ReleasePanel from './savings/ReleasePanel'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { X, Trash2, ChevronDown } from 'lucide-react'
 import {
@@ -43,6 +46,8 @@ function emptyForm() {
     fromAccountId: '',
     toAccountId: '',
     tripId: '',
+    goalId: '',
+    refundOfTransactionId: '',
     reimbursable: false,
     owedAmount: '',
     paidBackNote: '',
@@ -62,6 +67,8 @@ function formFromTx(tx) {
     fromAccountId: tx.fromAccountId ?? '',
     toAccountId: tx.toAccountId ?? '',
     tripId: tx.tripId ?? '',
+    goalId: tx.goalId ?? '',
+    refundOfTransactionId: tx.refundOfTransactionId ?? '',
     reimbursable: Boolean(tx.reimbursable),
     owedAmount: tx.owedAmount ? toAmountInputValue(tx.owedAmount) : '',
     paidBackNote: tx.paidBackNote || '',
@@ -80,6 +87,9 @@ export default function TransactionForm({
   prefillAmount,
   onMetaChanged,
 }) {
+  const [budget, setBudget] = useState(null)
+  const [conflict, setConflict] = useState(null)
+  const [pendingDelete, setPendingDelete] = useState(false)
   const [form, setForm] = useState(emptyForm)
   const [error, setError] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -109,6 +119,9 @@ export default function TransactionForm({
     // share/notification auto-fill). Only seeds the amount, nothing else.
     if (!editingTx && prefillAmount) base.amount = toAmountInputValue(prefillAmount)
     setForm(base)
+    setConflict(null)
+    setPendingDelete(false)
+    readBudget().then(setBudget).catch((e) => setError(e.message))
     setError('')
     setConfirmDelete(false)
     setMini(null)
@@ -116,7 +129,7 @@ export default function TransactionForm({
     setOwedSuggestions([])
     appliedOwedRef.current = editingTx?.paidBackNote || ''
     // Auto-expand when the row already uses an optional tag, so it's visible.
-    setOptionalOpen(Boolean(base.tripId) || Boolean(base.reimbursable))
+    setOptionalOpen(Boolean(base.tripId) || Boolean(base.reimbursable) || Boolean(base.goalId) || Boolean(base.refundOfTransactionId))
     appliedDescRef.current = editingTx?.description || ''
   }, [open, editingTx, prefillAmount])
 
@@ -189,6 +202,15 @@ export default function TransactionForm({
   const owedValue = useMemo(() => evaluateOwed(form.owedAmount, amountValue).value ?? 0, [form.owedAmount, amountValue])
   const netPreview = form.resolved ? Math.max(0, amountValue - owedValue) : amountValue
 
+  const fundingPreview = useMemo(() => {
+    if (!budget || form.type !== 'expense' || !form.goalId || netPreview <= 0) return null
+    try {
+      const fields = { type: 'expense', goalId: Number(form.goalId), tripId: form.tripId ? Number(form.tripId) : null, amount: amountValue, accountId: Number(form.accountId) || budget.accounts.find((a) => a.usage !== 'investment')?.id, categoryId: Number(form.categoryId) || budget.categories.find((c) => c.kind === 'expense')?.id, date: fromDateInputValue(form.date), reimbursable: form.reimbursable ? 1 : 0, owedAmount: owedValue, resolved: form.resolved ? 1 : 0 }
+      const applied = applyBudgetAction(budget, editingTx ? 'transaction.update' : 'transaction.add', editingTx ? { id: editingTx.id, fields } : fields, { allowShortfall: true })
+      return { earmarked: applied.result.fundedAmount || 0, available: Math.max(0, netPreview - (applied.result.fundedAmount || 0)) }
+    } catch { return null }
+  }, [budget, form, amountValue, owedValue, netPreview, editingTx])
+
   function toggleResolved() {
     set({ resolved: !form.resolved })
   }
@@ -200,9 +222,6 @@ export default function TransactionForm({
     if (form.tripId) {
       const trip = trips.find((t) => t.id === Number(form.tripId))
       if (trip) parts.push(trip.name)
-    }
-    if (form.reimbursable) {
-      parts.push(form.resolved ? 'Resolved' : `${formatAmount(owedValue)} owed`)
     }
     return parts.join(' · ')
   }, [form.tripId, form.reimbursable, form.resolved, owedValue, trips])
@@ -258,7 +277,7 @@ export default function TransactionForm({
     return ''
   }
 
-  async function handleSave() {
+  async function handleSave(releases = []) {
     const msg = validate()
     if (msg) {
       setError(msg)
@@ -267,6 +286,8 @@ export default function TransactionForm({
     setSaving(true)
     const payload = {
       type: form.type,
+      goalId: form.type === 'expense' && form.goalId ? Number(form.goalId) : null,
+      refundOfTransactionId: form.type === 'income' && form.refundOfTransactionId ? Number(form.refundOfTransactionId) : null,
       // Commit the evaluated calculator result (validate() guaranteed it).
       amount: evaluate(form.amount).value,
       date: fromDateInputValue(form.date),
@@ -285,25 +306,30 @@ export default function TransactionForm({
       isAdjustment: isAdjustment ? 1 : 0,
     }
     try {
-      if (isEdit) await updateTransaction(editingTx.id, payload)
-      else await addTransaction(payload)
+      if (isEdit) await updateTransaction(editingTx.id, payload, { releases })
+      else await addTransaction(payload, { releases })
       onSaved()
     } catch (error) {
+      if (error.code === 'RELEASE_REQUIRED') setConflict(error.details)
       setError(error.message || 'Could not save the transaction. Please try again.')
     } finally {
       setSaving(false)
     }
   }
 
-  async function handleDelete() {
+  async function handleDelete(releases = []) {
     if (!confirmDelete) {
       setConfirmDelete(true)
       return
     }
     setSaving(true)
     try {
-      await deleteTransaction(editingTx.id)
+      await deleteTransaction(editingTx.id, { releases })
       onSaved()
+    } catch (e) {
+      setPendingDelete(true)
+      if (e.code === 'RELEASE_REQUIRED') setConflict(e.details)
+      setError(e.message)
     } finally {
       setSaving(false)
     }
@@ -312,6 +338,7 @@ export default function TransactionForm({
   // ----- inline quick-create handlers -----
   async function createAccount(data) {
     const id = await addAccount(data)
+    setBudget(await readBudget())
     if (onMetaChanged) await onMetaChanged()
     if (mini === 'from') set({ fromAccountId: String(id) })
     else if (mini === 'to') set({ toAccountId: String(id) })
@@ -321,6 +348,7 @@ export default function TransactionForm({
 
   async function createCategory(data) {
     const id = await addCategory(data)
+    setBudget(await readBudget())
     if (onMetaChanged) await onMetaChanged()
     set({ categoryId: String(id) })
     setMini(null)
@@ -492,6 +520,13 @@ export default function TransactionForm({
                 </div>
               )}
 
+              {form.type === 'income' && budget?.transactions.some((t) => t.type === 'expense' && t.goalId) && <div className="mb-4">
+                <label htmlFor="tx-refund" className="mb-1.5 block text-sm text-txt-secondary">Refund for goal purchase (optional)</label>
+                <select id="tx-refund" value={form.refundOfTransactionId} onChange={(e) => set({ refundOfTransactionId: e.target.value })} className="w-full rounded-2xl border border-hairline bg-elevated p-3">
+                  <option value="">Not a goal refund</option>{budget.transactions.filter((t) => t.type === 'expense' && t.goalId).map((t) => <option key={t.id} value={t.id}>{t.description || 'Purchase'} · {formatAmount(t.amount)}</option>)}
+                </select>
+              </div>}
+              {conflict && <ReleasePanel key={JSON.stringify(conflict)} conflict={conflict} busy={saving} onCancel={() => setConflict(null)} onConfirm={async (releases) => { if (pendingDelete) await handleDelete(releases); else await handleSave(releases) }} />}
               {/* Optional tags (trip + paid back) — collapsed unless in use */}
               {form.type === 'expense' && (
                 <div className="mb-4 overflow-hidden rounded-2xl border border-hairline bg-elevated">
@@ -519,12 +554,19 @@ export default function TransactionForm({
 
                   <Collapse open={optionalOpen}>
                     <div className="border-t border-hairline px-4 pb-4 pt-3">
+                      {budget?.goals.some((g) => g.modelVersion === 2) && <div className="mb-4">
+                        <label htmlFor="tx-goal" className="mb-1.5 block text-sm text-txt-secondary">Use savings goal</label>
+                        <select id="tx-goal" value={form.goalId} onChange={(e) => set({ goalId: e.target.value })} className="w-full rounded-2xl border border-hairline bg-card p-3">
+                          <option value="">None</option>{budget.goals.filter((g) => g.modelVersion === 2 && (!g.archived || g.id === Number(form.goalId))).map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                        </select>
+                        {fundingPreview && <p className="mt-2 text-xs text-txt-secondary">Uses {formatAmount(fundingPreview.earmarked)} reserved · {formatAmount(fundingPreview.available)} available.</p>}
+                      </div>}
                       {/* Trip tag (only once you have trips) */}
                       {tripChoices.length > 0 && (
                         <div className="mb-4">
                           <label
                             htmlFor="tx-trip"
-                            className="mb-1.5 block text-sm text-txt-secondary"
+                            className="sr-only"
                           >
                             Trip
                           </label>
@@ -533,7 +575,7 @@ export default function TransactionForm({
                             value={
                               form.tripId === '' || form.tripId == null ? '' : String(form.tripId)
                             }
-                            onChange={(e) => set({ tripId: e.target.value })}
+                            onChange={(e) => set({ tripId: e.target.value, goalId: trips.find((t) => t.id === Number(e.target.value))?.goalId ?? '' })}
                             className="w-full appearance-none rounded-2xl border border-hairline bg-card px-4 py-3 text-txt-primary focus:outline-none focus:ring-1 focus:ring-accent/50"
                             style={{
                               backgroundImage:
@@ -604,7 +646,6 @@ export default function TransactionForm({
                                 Resolved
                               </button>}
                             />
-                            <p className="mt-2 text-xs text-txt-muted">Percentages use the transaction total: 20% of 100 is 20.</p>
                           </div>
                           <div>
                             <label
@@ -652,7 +693,7 @@ export default function TransactionForm({
               {error && <p className="mb-3 text-sm text-expense">{error}</p>}
 
               <button
-                onClick={handleSave}
+                onClick={() => handleSave()}
                 disabled={saving}
                 className="mt-2 w-full rounded-2xl bg-accent py-3.5 text-base font-semibold text-black transition-opacity active:opacity-80 disabled:opacity-50"
               >
@@ -661,7 +702,7 @@ export default function TransactionForm({
 
               {isEdit && (
                 <button
-                  onClick={handleDelete}
+                  onClick={() => handleDelete()}
                   disabled={saving}
                   className={`mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border py-3 text-base font-semibold transition-colors ${
                     confirmDelete

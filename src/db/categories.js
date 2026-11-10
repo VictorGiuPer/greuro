@@ -12,8 +12,9 @@ export function getCategoriesByKind(kind) {
 }
 
 /** Count transactions that reference this category. */
-export function countCategoryUsage(id) {
-  return db.transactions.where('categoryId').equals(id).count()
+export async function countCategoryUsage(id) {
+  const [transactions, scheduled] = await Promise.all([db.transactions.where('categoryId').equals(id).count(), db.scheduled.filter((s) => s.categoryId === id).count()])
+  return transactions + scheduled
 }
 
 export async function addCategory(data) {

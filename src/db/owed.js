@@ -1,3 +1,4 @@
+import { updateTransaction } from './transactions'
 import { db } from './db'
 import { isOwedEntry, owedKey, owedName } from '../lib/owed'
 import { outstandingAmount } from '../lib/txAmount'
@@ -22,21 +23,21 @@ export async function getOwedNameSuggestions(prefix, limit = 4) {
 
 // One database transaction = one cloud save, with rollback if it fails.
 export async function resolveOwedTransactions(ids) {
-  return db.transaction('rw', db.transactions, async () => {
+  return db.transaction('rw', db.tables, async () => {
     const changes = []
     const updatedAt = Date.now()
     for (const id of new Set(ids)) {
       const row = await db.transactions.get(id)
       if (!row || outstandingAmount(row) <= 0) continue
-      await db.transactions.update(id, { resolved: 1, updatedAt })
-      changes.push({ id, resolved: row.resolved ?? 0, updatedAt })
+      await updateTransaction(id, { resolved: 1, updatedAt })
+      changes.push({ id, resolved: row.resolved ?? 0, updatedAt: (await db.transactions.get(id)).updatedAt })
     }
     return changes
   })
 }
 
 export async function undoOwedResolution(changes) {
-  return db.transaction('rw', db.transactions, async () => {
+  return db.transaction('rw', db.tables, async () => {
     for (const change of changes) {
       const row = await db.transactions.get(change.id)
       if (!row || !row.resolved || row.updatedAt !== change.updatedAt) {
@@ -44,7 +45,7 @@ export async function undoOwedResolution(changes) {
       }
     }
     for (const change of changes) {
-      await db.transactions.update(change.id, { resolved: change.resolved, updatedAt: Date.now() })
+      await updateTransaction(change.id, { resolved: change.resolved, updatedAt: Date.now() })
     }
   })
 }

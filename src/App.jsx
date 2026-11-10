@@ -1,3 +1,4 @@
+import ShortfallResolution from './components/savings/ShortfallResolution'
 import { useCallback, useEffect, useState } from 'react'
 import { postDueScheduled, getSetting, setSetting } from './db'
 import { isDatabaseEmpty } from './db/maintenance'
@@ -12,10 +13,12 @@ import Dashboard from './pages/Dashboard'
 import Transactions from './pages/Transactions'
 import Reminders from './pages/Reminders'
 import Owed from './pages/Owed'
+import Savings from './pages/Savings'
 import SupabaseSignIn from './components/SupabaseSignIn'
 
 export default function App() {
   const [auth, setAuth] = useState({ status: 'loading', user: null, error: '' })
+  const [financialRevision, setFinancialRevision] = useState(0)
   const [activeTab, setActiveTab] = useState('dashboard')
   // Transactions owns its filters for this signed-in session. Overview's
   // period/category selections remain local to Dashboard and never enter here.
@@ -142,7 +145,7 @@ export default function App() {
 
   return (
     <div className="flex min-h-dvh flex-col bg-bg text-txt-primary">
-      <main className="flex-1">
+      <main key={financialRevision} className="flex-1">
         {activeTab === 'dashboard' && (
           <Dashboard prefillAmount={prefillAmount} onPrefillConsumed={clearPrefill} user={auth.user} onSignOut={handleSignOut} />
         )}
@@ -155,8 +158,10 @@ export default function App() {
           />
         )}
         {activeTab === 'reminders' && <Reminders />}
+        {activeTab === 'savings' && <Savings />}
         {activeTab === 'owed' && <Owed />}
       </main>
+      <ShortfallResolution onResolved={() => setFinancialRevision((n) => n + 1)} />
       <BottomTabBar activeTab={activeTab} onTabChange={changeTab} />
       <Toast message={toast} onDone={clearToast} />
     </div>

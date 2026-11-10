@@ -1,3 +1,5 @@
+import { savingsPool } from '../lib/savings'
+import { validateSavings } from '../lib/budgetDomain'
 import { db } from './db'
 import { setSetting } from './settings'
 
@@ -118,6 +120,7 @@ export async function applyBackup(obj, mode, targetDb = db) {
       imported.settings = settings.length
       imported.goals = goals.length
       imported.trips = trips.length
+      await markRestoredSavings(targetDb)
       return
     }
 
@@ -156,16 +159,23 @@ export async function applyBackup(obj, mode, targetDb = db) {
       }
     }
 
+    const goalIdMap = new Map()
+    for (const goal of goals) {
+      const newId = await targetDb.goals.add(stripId(goal))
+      goalIdMap.set(goal.id, newId)
+      imported.goals += 1
+    }
     // Trips are inserted fresh; keep an old→new id map to remap tripId.
     const tripIdMap = new Map()
     for (const trip of trips) {
-      const newId = await targetDb.trips.add(stripId(trip))
+      const newId = await targetDb.trips.add({ ...stripId(trip), goalId: trip.goalId ? (goalIdMap.get(trip.goalId) ?? null) : null })
       tripIdMap.set(trip.id, newId)
       imported.trips += 1
     }
 
     const remapRefs = (row) => ({
       ...row,
+      goalId: row.goalId ? (goalIdMap.get(row.goalId) ?? null) : null,
       categoryId: row.categoryId != null ? (categoryIdMap.get(row.categoryId) ?? null) : null,
       accountId: row.accountId != null ? (accountIdMap.get(row.accountId) ?? null) : null,
       fromAccountId:
@@ -174,21 +184,26 @@ export async function applyBackup(obj, mode, targetDb = db) {
       tripId: row.tripId != null ? (tripIdMap.get(row.tripId) ?? null) : null,
     })
 
+    const transactionIdMap = new Map()
     for (const t of transactions) {
-      await targetDb.transactions.add(remapRefs(stripId(t)))
+      const newId = await targetDb.transactions.add({ ...remapRefs(stripId(t)), refundOfTransactionId: null })
+      transactionIdMap.set(t.id, newId)
       imported.transactions += 1
     }
+    for (const t of transactions) if (t.refundOfTransactionId) await targetDb.transactions.update(transactionIdMap.get(t.id), { refundOfTransactionId: transactionIdMap.get(t.refundOfTransactionId) ?? null })
     for (const s of scheduled) {
       await targetDb.scheduled.add(remapRefs(stripId(s)))
       imported.scheduled += 1
     }
-    // Goals carry no account/category refs — insert fresh.
-    for (const g of goals) {
-      await targetDb.goals.add(stripId(g))
-      imported.goals += 1
-    }
-    // Settings intentionally untouched in merge mode.
+    await markRestoredSavings(targetDb)
+    // Other settings intentionally untouched in merge mode.
   })
 
   return imported
+}
+
+async function markRestoredSavings(targetDb) {
+  const data = Object.fromEntries(await Promise.all(TABLES.map(async (t) => [t, await targetDb[t].toArray()])))
+  validateSavings(data)
+  if (savingsPool(data).shortfall > 0 && savingsPool(data).earmarked > 0) await targetDb.settings.put({ key: 'savingsResolutionRequired', value: true })
 }

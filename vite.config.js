@@ -4,6 +4,8 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
   base: '/greuro/',
+  optimizeDeps: { entries: ['index.html'] },
+  server: { watch: { ignored: ['**/.test-tmp/**'] } },
   plugins: [
     react(),
     VitePWA({
